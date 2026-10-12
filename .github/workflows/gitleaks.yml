@@ -5,6 +5,7 @@ on:
     branches: [main]
 permissions:
   contents: read
+  pull-requests: read  # gitleaks-action lists the PR commits through the API
 jobs:
   gitleaks:
     runs-on: ubuntu-latest
