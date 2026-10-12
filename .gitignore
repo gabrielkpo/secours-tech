@@ -1,0 +1,12 @@
+# secrets
+.env
+# source documents and generated indexes stay out of Git (large, downloaded by script)
+data/raw/
+data/index/
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
