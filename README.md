@@ -8,7 +8,7 @@ doctrine** (GDO, GTO, SSUAP, PSE), **cites the guide and page** behind every cla
 when the doctrine does not cover the question.
 
 > **Status: early stage (milestone 1 of 12), expect breaking changes.** PDF ingestion and CI are
-> on `main`; the Postgres index is in review; retrieval, generation and the API are not built yet.
+> on `main`, with the Postgres index; retrieval, generation and the API are not built yet.
 > Personal project, not validated by the French civil protection: it does not replace training or
 > command. See [Status / Roadmap](#status--roadmap).
 
@@ -16,7 +16,7 @@ when the doctrine does not cover the question.
 
 A firefighter, trainer or trainee has a precise question ("safety perimeter around a high-voltage
 line?", "what to do in a silo?"). The answer sits in national guides of up to 400 pages, published
-as PDFs. Searching them takes time, and an approximate answer can be dangerous.
+as PDFs. Searching takes time; an approximate answer can be dangerous.
 
 A general-purpose LLM answers fluently but invents figures and cannot say which page it relied on.
 SecoursTech takes the opposite stance: an answer is shown only if every quoted passage is found
@@ -34,7 +34,7 @@ Request path. Solid boxes exist on `main`; dashed boxes are the target design, n
 flowchart LR
     A["Official PDFs<br/>(interieur.gouv.fr)"] --> B["secours_tech.ingest<br/>text per page"]
     B --> C["chunks<br/>(document, page, text)"]
-    C --> D[("Postgres + pgvector<br/>chunks, embeddings,<br/>French full text")]
+    C --> D[("Postgres + pgvector<br/>chunks, French full text<br/>(embeddings: next)")]
     Q["Question"] --> G["Input guardrails<br/>length, scope"]
     G --> R["Hybrid retrieval<br/>vectors + full text (RRF)"]
     D --> R
@@ -44,7 +44,7 @@ flowchart LR
     V -->|no| NO["Refusal with reason"]
 
     classDef planned stroke-dasharray: 5 5
-    class D,G,R,M,V,OK,NO planned
+    class G,R,M,V,OK,NO planned
 ```
 
 Delivery and quality gates around the code:
@@ -101,7 +101,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | Milestone | Content | State |
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
-| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | ingestion merged, Postgres loader in review ([#13](https://github.com/gabrielkpo/secours-tech/pull/13)), OCR planned |
+| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | ingestion and Postgres loader merged; per-page extraction and OCR next |
 | J2 Evaluation set v1 | 30 questions with expected answers and pages, written before any run | planned |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
@@ -129,20 +129,22 @@ Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), and the official 
 
 ```bash
 uv sync --locked
-uv run python -m secours_tech.ingest data/raw data/index/chunks.jsonl
-uv run pytest
+createdb secours_tech                      # Postgres 17 with pgvector and unaccent
+DATABASE_URL=postgresql:///secours_tech uv run python -m secours_tech.load data/raw
+uv run pytest                              # set TEST_DATABASE_URL to run the database tests
 ```
 
-The ingestion writes one JSON line per chunk (`document`, `page`, `text`) and logs a warning for
-every page with no extractable text. `.env.example` lists the variables the next milestones need
-(Mistral API key, read by the server only).
+The loader applies the SQL migrations, then stores each PDF in `documents` (SHA-256, page count,
+pages without text) and its chunks in `chunks` (page, text, extraction method, full-text vector). Running it twice changes nothing. `.env.example` lists the Mistral key the next
+milestones need (server side only).
 
 ## Project structure
 
 | Path | Content |
 |---|---|
-| `src/secours_tech/ingest.py` | PDF text per page, header and footer removal, sentence-aware chunking, CLI |
-| `tests/` | Unit tests of the chunking and page handling |
+| `src/secours_tech/ingest.py` | PDF text per page, header and footer removal, sentence-aware chunking |
+| `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
+| `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `docs/architecture.md` | Architecture decisions |
 | `data/` | Local PDFs and generated index, ignored by Git |
 | `.github/` | CI, secret scan, CodeQL, PR title check, Dependabot, release-please |

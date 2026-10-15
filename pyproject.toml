@@ -1,9 +1,12 @@
 [project]
 name = "secours-tech"
 version = "0.1.0"
-description = "RAG assistant over official French firefighter doctrine (GDO, GTO, SSUAP), with cited sources."
+description = "RAG assistant over official French firefighter doctrine (GDO, GTO, SSUAP, PSE), with cited sources."
 requires-python = ">=3.11"
-dependencies = ["pypdf>=4.0"]
+dependencies = [
+    "psycopg[binary]>=3.2",
+    "pypdf>=4.0",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
