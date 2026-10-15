@@ -59,23 +59,25 @@ def strip_repeated_lines(pages: list[str], min_pages: int = 3, ratio: float = 0.
     Only pages that have text count: pages left empty (routed to OCR, or blank) would otherwise
     raise the threshold beyond reach in mostly-image guides. Lines are compared by their words of
     three letters or more, so "Page 3" and "Page 4" count as the same line, and so does an OCR'd
-    footer next to a logo read as "@&" on one page and "À\\" on the next.
+    footer next to a logo read as "@&" on one page and "À\\" on the next. A line without such
+    words (a bare page number) is compared with its digits masked.
     """
     with_text = sum(1 for page in pages if page.strip())
     if with_text < min_pages:
         return pages
 
     def key(line: str) -> str:
-        return " ".join(re.findall(r"[^\W\d_]{3,}", line))
+        words = re.findall(r"[^\W\d_]{3,}", line)
+        return " ".join(words) if words else re.sub(r"\d+", "#", line.strip())
 
     counts: dict[str, int] = {}
     for page in pages:
-        for k in {key(line) for line in page.splitlines()} - {""}:
+        for k in {key(line) for line in page.splitlines() if line.strip()}:
             counts[k] = counts.get(k, 0) + 1
     threshold = max(min_pages, ratio * with_text)
 
     def is_boilerplate(line: str) -> bool:
-        return len(line) < 120 and counts.get(key(line) or None, 0) >= threshold
+        return len(line) < 120 and counts.get(key(line), 0) >= threshold
 
     return ["\n".join(ln for ln in p.splitlines() if not is_boilerplate(ln)) for p in pages]
 

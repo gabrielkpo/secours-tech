@@ -115,10 +115,10 @@ def sample(conn, per_guide: int, seed: int) -> dict[str, list[int]]:
 
 
 def ocr_pages(conn, filename: str) -> dict[int, str]:
-    """OCR text of a current guide's pages, running headers and footers removed as at indexing.
+    """OCR text of a current guide's pages, without its running headers and footers.
 
-    The repeated lines are found across all the guide's OCR pages, the way chunking finds them
-    across a guide's text pages; transcriptions leave them out.
+    The repeated lines are found across all the guide's OCR pages with the function chunking
+    uses on a guide's text pages; transcriptions leave them out.
     """
     rows = conn.execute(
         "SELECT p.page, p.ocr_text FROM pages p JOIN documents d ON d.id = p.document_id"

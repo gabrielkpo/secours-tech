@@ -71,6 +71,7 @@ def test_ocr_footer_is_removed_despite_logo_noise():
     assert strip_repeated_lines(pages) == bodies
 
 
-def test_lines_without_words_are_never_taken_for_a_footer():
-    pages = [f"Étape {i}.\n1 2 3" for i in range(4)]
-    assert all("1 2 3" in page for page in strip_repeated_lines(pages))
+def test_bare_page_numbers_are_removed():
+    bodies = ["Ventiler le local.", "Couper le gaz.", "Baliser la zone.", "Éclairer."]
+    pages = [f"{body}\n{i}" for i, body in enumerate(bodies, start=12)]
+    assert strip_repeated_lines(pages) == bodies
