@@ -10,10 +10,6 @@ updates:
     groups:
       python:
         patterns: ["*"]
-    ignore:
-      # PDF parsing feeds the RAG index; a major changes extracted text and citations
-      - dependency-name: "pypdf"
-        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

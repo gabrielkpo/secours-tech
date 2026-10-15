@@ -2,7 +2,6 @@
 
 import argparse
 import hashlib
-import io
 import logging
 import re
 from dataclasses import dataclass
@@ -12,7 +11,8 @@ import psycopg
 
 from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
-from secours_tech.ingest import pages_to_chunks, read_pages
+from secours_tech.extract import Page, extract_pages
+from secours_tech.ingest import pages_to_chunks
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class SourceDocument:
     filename: str
     sha256: str
     page_texts: list[str]
+    pages: tuple[Page, ...] = ()  # per-page route and measures, when read from a PDF
 
     @property
     def content_sha256(self) -> str:
@@ -61,9 +62,10 @@ def sha256_of(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def read_source(name: str, data: bytes) -> SourceDocument:
-    """Parse PDF bytes already read from disk, so each file is read once."""
-    return SourceDocument(name, sha256_of(data), read_pages(io.BytesIO(data)))
+def read_source(path: Path, data: bytes) -> SourceDocument:
+    """Fingerprint the bytes already read and extract every page with poppler."""
+    pages = tuple(extract_pages(path))
+    return SourceDocument(path.name, sha256_of(data), [page.text for page in pages], pages)
 
 
 def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
@@ -129,6 +131,18 @@ def store_document(
         ):
             for position, chunk in enumerate(chunks):
                 copy.write_row((row[0], chunk.page, position, chunk.text))
+        if doc.pages:
+            with (
+                conn.cursor() as cur,
+                cur.copy(
+                    "COPY pages (document_id, page, route, letters, text_masks, images, quality)"
+                    " FROM STDIN"
+                ) as copy,
+            ):
+                for p in doc.pages:
+                    copy.write_row(
+                        (row[0], p.number, p.route, p.letters, p.text_masks, p.images, p.quality)
+                    )
     return len(chunks)
 
 
@@ -183,7 +197,7 @@ def main(argv: list[str] | None = None) -> None:
             if is_loaded(conn, sha):
                 log.info("%s: already loaded, skipped", pdf.name)
                 continue
-            count = store_document(conn, read_source(pdf.name, data), official.get(sha))
+            count = store_document(conn, read_source(pdf, data), official.get(sha))
             if count is None:
                 log.info("%s: same text as a loaded document, skipped", pdf.name)
             else:

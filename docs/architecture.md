@@ -27,9 +27,11 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   Queries use `websearch_to_tsquery`, which never fails on free text.
 - **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
   effect of OCR on retrieval and citations can be measured.
-- **Textless pages are measured, not hidden.** `textless_page_count` counts pages that give no
-  chunk. On the 29 current guides it is 758 of 3,139 pages (24%): many guides draw their text
-  as images. OCR is what fixes it.
+- **Each page is routed, not guessed.** `pdftotext` (poppler) reads the text layer; `pdfimages`
+  counts the images and the high-resolution 1-bit masks, which is how the ministry's Word
+  exports draw lines of text. A page goes to `text_layer` (enough clean letters), `ocr` (3+ text
+  masks, an image page, or a garbled layer) or `blank`; the `pages` table keeps the route and
+  the measures. On the 28 official guides: 1,740 text, 1,069 OCR, 184 blank.
 - **Official sources live in a manifest** (`corpus/sources.toml`: family, title, official URL,
   SHA-256), reviewed in PRs. The loader takes family, title and URL from it; a new file at the
   same URL becomes the next version and the previous one is marked `retired_at` (kept, so an

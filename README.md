@@ -102,7 +102,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | Milestone | Content | State |
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
-| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | ingestion and Postgres loader merged; per-page extraction and OCR next |
+| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader and per-page routing merged; OCR next |
 | J2 Evaluation set v1 | 30 questions with expected answers and pages, written before any run | planned |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
@@ -123,7 +123,7 @@ out-of-scope question answered, individual medical advice) must stay at 0. Basel
 
 ## Run it
 
-Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), and the official PDFs copied into
+Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler (`pdftotext`), and the official PDFs in
 `data/raw/` (not distributed here; see [Data and privacy](#data-and-privacy)).
 
 ```bash
@@ -141,7 +141,7 @@ milestones need (server side only).
 
 | Path | Content |
 |---|---|
-| `src/secours_tech/ingest.py` | PDF text per page, header and footer removal, sentence-aware chunking |
+| `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
@@ -164,11 +164,9 @@ milestones need (server side only).
 
 ## Limitations / next
 
-- **Image-only pages.** On the 29 guides used locally, 758 of 3,139 pages (24 %) yield no chunk:
-  in ten guides each line of text is stored as an image, and 174 pages are truly blank (measured
-  in [#13](https://github.com/gabrielkpo/secours-tech/pull/13)). OCR is the next step.
-- **Extraction noise.** `pypdf` inserts stray spaces in about 5 % of the chunks ("cohérence ,",
-  "pr océdures"); a cleaner per-page extractor is planned with the OCR work.
+- **Pages waiting for OCR.** Of the 2,993 pages of the 28 official guides, 1,069 are routed to
+  OCR (in 12 guides each line of text is drawn as an image; others are image pages) and 184 are
+  blank. Until OCR lands, those pages give no chunk.
 - **No answers yet.** Retrieval, generation and the citation check are designed but not built,
   so there are no results to report.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
