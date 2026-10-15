@@ -9,8 +9,8 @@ from secours_tech.load import (
     SourceDocument,
     family_of,
     is_loaded,
-    retire_unlisted,
     store_document,
+    sync_with_manifest,
     title_of,
 )
 
@@ -148,7 +148,19 @@ def test_a_new_edition_at_the_same_url_retires_the_previous_one(conn):
     assert rows == [(1, True), (2, False)]
 
 
-def test_guides_dropped_from_the_manifest_are_retired(conn):
-    store_document(conn, DOC, Entry("GDO", "Silos", "https://example.org/old.pdf", DOC.sha256))
-    assert retire_unlisted(conn, {"https://example.org/new.pdf"}) == 1
-    assert conn.execute("SELECT retired_at IS NOT NULL FROM documents").fetchone() == (True,)
+def test_the_manifest_decides_which_guides_are_current(conn):
+    silos = Entry("GDO", "Silos", "https://example.org/silos.pdf", DOC.sha256)
+    store_document(conn, DOC, silos)
+    assert sync_with_manifest(conn, []) == (1, 0)  # dropped from the manifest: retired
+    assert sync_with_manifest(conn, [silos]) == (0, 1)  # put back: restored
+    assert conn.execute("SELECT retired_at IS NULL FROM documents").fetchone() == (True,)
+
+
+def test_sync_keeps_only_the_listed_edition_current(conn):
+    url = "https://example.org/silos.pdf"
+    store_document(conn, DOC, Entry("GDO", "Silos", url, DOC.sha256))
+    edition_2 = SourceDocument(DOC.filename, "9" * 64, ["Silo safety distance is 60 m."])
+    store_document(conn, edition_2, Entry("GDO", "Silos", url, edition_2.sha256))
+    assert sync_with_manifest(conn, [Entry("GDO", "Silos", url, edition_2.sha256)]) == (0, 0)
+    current = conn.execute("SELECT version FROM documents WHERE retired_at IS NULL").fetchall()
+    assert current == [(2,)]

@@ -132,16 +132,26 @@ def store_document(
     return len(chunks)
 
 
-def retire_unlisted(conn: psycopg.Connection, urls: set[str]) -> int:
-    """Retire official guides whose URL left the manifest (withdrawn, or replaced by a new
-    edition published at another URL), so they can no longer be cited as current."""
+def sync_with_manifest(conn: psycopg.Connection, entries: list[Entry]) -> tuple[int, int]:
+    """Make the manifest decide which official guides are current.
+
+    A row is current exactly when its (URL, SHA-256) is in the manifest: a guide dropped from it
+    (withdrawn, or replaced by an edition at another URL) is retired, and a guide put back is
+    restored. Returns (retired, restored).
+    """
+    listed = ([entry.url for entry in entries], [entry.sha256 for entry in entries])
+    pairs = "(url, sha256) IN (SELECT * FROM unnest(%s::text[], %s::text[]))"
     with conn.transaction():
-        cur = conn.execute(
+        retired = conn.execute(
             "UPDATE documents SET retired_at = now()"
-            " WHERE source = 'web' AND retired_at IS NULL AND NOT (url = ANY(%s))",
-            (sorted(urls),),
-        )
-    return cur.rowcount
+            f" WHERE source = 'web' AND retired_at IS NULL AND NOT {pairs}",
+            listed,
+        ).rowcount
+        restored = conn.execute(
+            f"UPDATE documents SET retired_at = NULL WHERE source = 'web' AND retired_at IS NOT NULL AND {pairs}",
+            listed,
+        ).rowcount
+    return retired, restored
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -179,9 +189,9 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 log.info("%s: %d chunks", pdf.name, count)
         if official:
-            retired = retire_unlisted(conn, {doc.url for doc in official.values()})
-            if retired:
-                log.info("%d guide(s) no longer in the manifest, retired", retired)
+            retired, restored = sync_with_manifest(conn, list(official.values()))
+            if retired or restored:
+                log.info("manifest sync: %d guide(s) retired, %d restored", retired, restored)
 
 
 if __name__ == "__main__":

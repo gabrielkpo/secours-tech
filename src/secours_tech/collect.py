@@ -137,7 +137,7 @@ def fetch(url: str) -> tuple[int, str | None]:
             return response.status, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, None
-    except (urllib.error.URLError, TimeoutError):
+    except OSError:  # URLError, timeouts, connection resets
         return 0, None  # unreachable: reported like a blocked page, so a person checks it
 
 
