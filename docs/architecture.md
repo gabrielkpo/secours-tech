@@ -47,5 +47,6 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   page row; nothing is indexed yet. A guide's OCR text becomes chunks only if a hand-transcribed
   sample of its pages passes `python -m secours_tech.ocr_bench score`: every number read exactly
   (none missing, none added) and a character error rate of at most 1 %. Otherwise the guide
-  stays uncovered. Transcriptions live outside Git (`data/ocr-reference/`): they are doctrine
+  stays uncovered. Only pages with text drawn as images are sampled and can be indexed; image
+  pages (photos, diagrams) are OCRed for measurement but stay uncovered. Transcriptions live outside Git (`data/ocr-reference/`): they are doctrine
   text.

@@ -147,10 +147,17 @@ def main(argv: list[str] | None = None) -> None:
 
         def work(job):
             doc, page, pdf = job
-            return doc, page, ocr_page(pdf, page)
+            try:
+                return doc, page, ocr_page(pdf, page)
+            except subprocess.CalledProcessError as error:
+                # one unreadable page must not stop the run; it stays NULL and is retried next time
+                log.warning("%s page %d: %s failed, skipped", pdf.name, page, error.cmd[0])
+                return doc, page, None
 
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             for done, (doc, page, result) in enumerate(pool.map(work, jobs), start=1):
+                if result is None:
+                    continue
                 conn.execute(
                     "UPDATE pages SET ocr_text = %s, ocr_confidence = %s, ocr_engine = %s,"
                     " ocr_at = now() WHERE document_id = %s AND page = %s",

@@ -5,6 +5,10 @@ guide's OCR pages, every number must be read exactly (no number missing, none ad
 least 99 % of the characters must be right (character error rate <= 1 %). A guide that fails
 stays uncovered.
 
+Only pages whose text is drawn as images (text masks, see `extract.MIN_TEXT_MASKS`) are sampled,
+and only those pages can be indexed once their guide passes: image pages (photos, diagrams) are
+OCRed for measurement but stay uncovered, since their labels are neither sampled nor reliable.
+
 References live outside Git (`data/ocr-reference/<pdf stem>/p<page>.txt`): they are doctrine
 text. Only the scores go into the repository.
 """
@@ -18,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from secours_tech.db import connect
+from secours_tech.extract import MIN_TEXT_MASKS
 
 REFERENCES = Path("data/ocr-reference")
 MAX_CER = 0.01
@@ -88,8 +93,9 @@ def sample(conn, per_guide: int, seed: int) -> dict[str, list[int]]:
     """Pages to transcribe: a seeded random draw among each guide's OCR pages with text masks."""
     rows = conn.execute(
         "SELECT d.filename, p.page FROM pages p JOIN documents d ON d.id = p.document_id"
-        " WHERE p.route = 'ocr' AND p.text_masks > 0 AND d.retired_at IS NULL"
-        " ORDER BY d.filename, p.page"
+        " WHERE p.route = 'ocr' AND p.text_masks >= %s AND d.retired_at IS NULL"
+        " ORDER BY d.filename, p.page",
+        (MIN_TEXT_MASKS,),
     ).fetchall()
     by_guide: dict[str, list[int]] = {}
     for filename, page in rows:

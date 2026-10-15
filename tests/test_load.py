@@ -5,6 +5,7 @@ import pytest
 
 from secours_tech.collect import Entry
 from secours_tech.db import migrate
+from secours_tech.extract import Page
 from secours_tech.load import (
     SourceDocument,
     family_of,
@@ -172,3 +173,14 @@ def test_pages_are_stored_with_their_route(conn, make_pdf):
     store_document(conn, read_source(pdf, pdf.read_bytes()))
     rows = conn.execute("SELECT page, route FROM pages ORDER BY page").fetchall()
     assert rows == [(1, "text_layer"), (2, "blank")]
+
+
+def test_ocr_sample_only_draws_pages_with_text_drawn_as_images(conn):
+    from secours_tech.ocr_bench import sample
+
+    pages = (
+        Page(1, "", "ocr", 120, 25, 26, 1.0),  # lines of text drawn as images
+        Page(2, "", "ocr", 5, 0, 1, 1.0),  # photo page
+    )
+    store_document(conn, SourceDocument("GTO-test.pdf", "a" * 64, ["", ""], pages))
+    assert sample(conn, per_guide=5, seed=1) == {"GTO-test.pdf": [1]}

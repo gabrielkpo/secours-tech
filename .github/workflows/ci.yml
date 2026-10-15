@@ -32,7 +32,11 @@ jobs:
       # --locked fails if uv.lock is out of date, so CI runs exactly the locked versions
       - name: Install
         run: uv sync --locked
-      # pinned French model, checked against its SHA-256 (src/secours_tech/ocr.py)
+      # pinned French model, cached between runs and checked against its SHA-256 (ocr.py)
+      - uses: actions/cache@v6
+        with:
+          path: data/tessdata
+          key: tessdata-fra-907743d98915
       - run: uv run python -c "from secours_tech.ocr import fetch_model; fetch_model()"
       - run: uv run ruff check .
       - run: uv run ruff format --check .
