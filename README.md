@@ -16,7 +16,7 @@ when the doctrine does not cover the question.
 
 A firefighter, trainer or trainee has a precise question ("safety perimeter around a high-voltage
 line?", "what to do in a silo?"). The answer sits in national guides of up to 400 pages, published
-as PDFs. Searching them takes time, and an approximate answer can be dangerous.
+as PDFs. Searching takes time; an approximate answer can be dangerous.
 
 A general-purpose LLM answers fluently but invents figures and cannot say which page it relied on.
 SecoursTech takes the opposite stance: an answer is shown only if every quoted passage is found
@@ -135,8 +135,8 @@ uv run pytest                              # set TEST_DATABASE_URL to run the da
 ```
 
 The loader applies the SQL migrations, then stores each PDF in `documents` (SHA-256, page count,
-pages without text) and its chunks in `chunks` (page, text, extraction method, full-text vector). Running it twice changes nothing. `.env.example` lists the variables the next milestones need
-(Mistral API key, read by the server only).
+pages without text) and its chunks in `chunks` (page, text, extraction method, full-text vector). Running it twice changes nothing. `.env.example` lists the Mistral key the next
+milestones need (server side only).
 
 ## Project structure
 
