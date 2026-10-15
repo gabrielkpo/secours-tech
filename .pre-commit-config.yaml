@@ -1,10 +1,18 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.7
+  # ruff runs through uv so the hooks always use the version locked in uv.lock, like the CI
+  - repo: local
     hooks:
       - id: ruff
+        name: ruff check
+        entry: uv run ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
       - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.4
+    rev: v8.30.1
     hooks:
       - id: gitleaks
