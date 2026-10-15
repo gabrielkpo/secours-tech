@@ -8,6 +8,19 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      # same Postgres major version and pgvector as the local Homebrew install
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres  # throwaway CI container, not a real secret
+          POSTGRES_DB: secours_tech_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/secours_tech_test
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -17,4 +30,4 @@ jobs:
         run: pip install -e . pytest ruff
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest
+      - run: pytest -rs  # -rs prints why a test was skipped, so a missing database shows up
