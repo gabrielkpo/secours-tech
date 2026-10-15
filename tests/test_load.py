@@ -4,7 +4,7 @@ import psycopg
 import pytest
 
 from secours_tech.db import migrate
-from secours_tech.load import SourceDocument, family_of, store_document, title_of
+from secours_tech.load import SourceDocument, family_of, is_loaded, store_document, title_of
 
 
 @pytest.mark.parametrize(
@@ -75,8 +75,16 @@ def test_document_and_chunks_are_stored_with_their_page(conn):
 
 def test_loading_the_same_file_twice_changes_nothing(conn):
     store_document(conn, DOC)
+    assert is_loaded(conn, DOC.sha256)
     assert store_document(conn, DOC) is None
     assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == 2
+
+
+def test_a_recompressed_copy_with_the_same_text_is_not_loaded_twice(conn):
+    store_document(conn, DOC)
+    copy = SourceDocument("GDO-Interventions-Silos-compressed.pdf", "d" * 64, DOC.page_texts)
+    assert store_document(conn, copy) is None
+    assert conn.execute("SELECT count(*) FROM documents").fetchone()[0] == 1
 
 
 def test_full_text_search_finds_french_word_forms(conn):

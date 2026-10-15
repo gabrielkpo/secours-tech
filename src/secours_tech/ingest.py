@@ -6,6 +6,7 @@ import logging
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 from pypdf import PdfReader
 
@@ -87,9 +88,9 @@ def pages_to_chunks(document: str, page_texts: list[str], size: int = 800) -> li
     return chunks
 
 
-def read_pages(path: Path) -> list[str]:
+def read_pages(source: Path | BinaryIO) -> list[str]:
     """Raw text of every page, in order. A scanned page gives an empty string."""
-    return [page.extract_text() or "" for page in PdfReader(path).pages]
+    return [page.extract_text() or "" for page in PdfReader(source).pages]
 
 
 def ingest_pdf(path: Path, size: int = 800) -> list[Chunk]:

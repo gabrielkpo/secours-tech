@@ -20,6 +20,9 @@ CREATE TABLE documents (
     url                text CHECK (source = 'local' OR url IS NOT NULL),
     -- the fingerprint of the file: the same bytes are never loaded twice
     sha256             text NOT NULL UNIQUE CHECK (sha256 ~ '^[0-9a-f]{64}$'),
+    -- fingerprint of the extracted text: a recompressed copy of the same guide (other bytes,
+    -- same text) is not loaded a second time
+    content_sha256     text NOT NULL UNIQUE CHECK (content_sha256 ~ '^[0-9a-f]{64}$'),
     version            integer NOT NULL DEFAULT 1 CHECK (version > 0),
     published_on       date,
     collected_at       timestamptz NOT NULL DEFAULT now(),

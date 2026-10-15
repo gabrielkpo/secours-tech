@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import io
 import logging
 import re
 from dataclasses import dataclass
@@ -20,6 +21,11 @@ class SourceDocument:
     filename: str
     sha256: str
     page_texts: list[str]
+
+    @property
+    def content_sha256(self) -> str:
+        """Fingerprint of the extracted text, page breaks included."""
+        return hashlib.sha256("\f".join(self.page_texts).encode("utf-8")).hexdigest()
 
 
 def family_of(filename: str) -> str:
@@ -44,16 +50,26 @@ def title_of(filename: str) -> str:
     return " ".join(re.split(r"[-_\s]+", Path(filename).stem)).strip()
 
 
-def read_source(path: Path) -> SourceDocument:
-    data = path.read_bytes()
-    return SourceDocument(path.name, hashlib.sha256(data).hexdigest(), read_pages(path))
+def sha256_of(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_source(name: str, data: bytes) -> SourceDocument:
+    """Parse PDF bytes already read from disk, so each file is read once."""
+    return SourceDocument(name, sha256_of(data), read_pages(io.BytesIO(data)))
+
+
+def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
+    return (
+        conn.execute("SELECT 1 FROM documents WHERE sha256 = %s", (sha256,)).fetchone() is not None
+    )
 
 
 def store_document(conn: psycopg.Connection, doc: SourceDocument) -> int | None:
     """Insert a document and its chunks in one transaction.
 
-    Returns the number of chunks, or None when a file with the same bytes is already loaded,
-    so running the loader twice changes nothing.
+    Returns the number of chunks, or None when a file with the same bytes or the same extracted
+    text is already loaded, so running the loader twice changes nothing.
     """
     with conn.transaction():
         chunks = pages_to_chunks(doc.filename, doc.page_texts)
@@ -62,10 +78,10 @@ def store_document(conn: psycopg.Connection, doc: SourceDocument) -> int | None:
         textless = len(doc.page_texts) - len({chunk.page for chunk in chunks})
         row = conn.execute(
             """
-            INSERT INTO documents (filename, title, family, source, sha256, page_count,
-                                   textless_page_count)
-            VALUES (%s, %s, %s, 'local', %s, %s, %s)
-            ON CONFLICT (sha256) DO NOTHING
+            INSERT INTO documents (filename, title, family, source, sha256, content_sha256,
+                                   page_count, textless_page_count)
+            VALUES (%s, %s, %s, 'local', %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
             RETURNING id
             """,
             (
@@ -73,6 +89,7 @@ def store_document(conn: psycopg.Connection, doc: SourceDocument) -> int | None:
                 title_of(doc.filename),
                 family_of(doc.filename),
                 doc.sha256,
+                doc.content_sha256,
                 len(doc.page_texts),
                 textless,
             ),
@@ -103,9 +120,15 @@ def main(argv: list[str] | None = None) -> None:
     with connect() as conn:
         migrate(conn)
         for pdf in pdfs:
-            count = store_document(conn, read_source(pdf))
-            if count is None:
+            data = pdf.read_bytes()
+            # check the fingerprint before parsing: a rerun skips loaded files without the
+            # extraction cost
+            if is_loaded(conn, sha256_of(data)):
                 log.info("%s: already loaded, skipped", pdf.name)
+                continue
+            count = store_document(conn, read_source(pdf.name, data))
+            if count is None:
+                log.info("%s: same text as a loaded document, skipped", pdf.name)
             else:
                 log.info("%s: %d chunks", pdf.name, count)
 
