@@ -24,7 +24,13 @@ class SourceDocument:
 
     @property
     def content_sha256(self) -> str:
-        """Fingerprint of the extracted text, page breaks included."""
+        """Fingerprint of the extracted text, page breaks included.
+
+        A document with no text at all (fully scanned) falls back to its file fingerprint:
+        two different scans of the same length would otherwise share the empty-text hash.
+        """
+        if not any(text.strip() for text in self.page_texts):
+            return self.sha256
         return hashlib.sha256("\f".join(self.page_texts).encode("utf-8")).hexdigest()
 
 

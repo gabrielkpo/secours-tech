@@ -112,3 +112,11 @@ def test_full_text_search_ignores_accents(conn):
 def test_chunks_record_how_their_text_was_extracted(conn):
     store_document(conn, DOC)
     assert conn.execute("SELECT DISTINCT extraction FROM chunks").fetchall() == [("text_layer",)]
+
+
+def test_two_different_fully_scanned_guides_are_both_loaded(conn):
+    scan_a = SourceDocument("GTO-scan-a.pdf", "e" * 64, ["", "  "])
+    scan_b = SourceDocument("GTO-scan-b.pdf", "f" * 64, ["", "  "])
+    assert store_document(conn, scan_a) == 0
+    assert store_document(conn, scan_b) == 0
+    assert conn.execute("SELECT count(*) FROM documents").fetchone()[0] == 2
