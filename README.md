@@ -135,9 +135,7 @@ uv run pytest                              # set TEST_DATABASE_URL to run the da
 ```
 
 The loader applies the SQL migrations, then stores each PDF in `documents` (SHA-256, page count,
-pages that give no text) and its chunks in `chunks` (document, page, text, extraction method,
-French full-text vector). Running it twice changes nothing: a file already loaded is skipped. The
-database tests wipe their database and refuse to run unless its name ends in `_test`. `.env.example` lists the variables the next milestones need
+pages without text) and its chunks in `chunks` (page, text, extraction method, full-text vector). Running it twice changes nothing. `.env.example` lists the variables the next milestones need
 (Mistral API key, read by the server only).
 
 ## Project structure
