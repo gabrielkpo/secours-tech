@@ -5,7 +5,14 @@ import pytest
 
 from secours_tech.collect import Entry
 from secours_tech.db import migrate
-from secours_tech.load import SourceDocument, family_of, is_loaded, store_document, title_of
+from secours_tech.load import (
+    SourceDocument,
+    family_of,
+    is_loaded,
+    retire_unlisted,
+    store_document,
+    title_of,
+)
 
 
 @pytest.mark.parametrize(
@@ -139,3 +146,9 @@ def test_a_new_edition_at_the_same_url_retires_the_previous_one(conn):
         "SELECT version, retired_at IS NOT NULL FROM documents ORDER BY version"
     ).fetchall()
     assert rows == [(1, True), (2, False)]
+
+
+def test_guides_dropped_from_the_manifest_are_retired(conn):
+    store_document(conn, DOC, Entry("GDO", "Silos", "https://example.org/old.pdf", DOC.sha256))
+    assert retire_unlisted(conn, {"https://example.org/new.pdf"}) == 1
+    assert conn.execute("SELECT retired_at IS NOT NULL FROM documents").fetchone() == (True,)

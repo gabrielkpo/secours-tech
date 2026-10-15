@@ -137,6 +137,8 @@ def fetch(url: str) -> tuple[int, str | None]:
             return response.status, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, None
+    except (urllib.error.URLError, TimeoutError):
+        return 0, None  # unreachable: reported like a blocked page, so a person checks it
 
 
 @dataclass
@@ -156,7 +158,10 @@ class Report:
         if self.blocked:
             out.append("### Pages the bot could not read")
             out.append("Open each page in a browser and compare it with `corpus/sources.toml`:")
-            out += [f"- [ ] {url} (HTTP {status})" for url, status in self.blocked]
+            out += [
+                f"- [ ] {url} ({f'HTTP {status}' if status else 'unreachable'})"
+                for url, status in self.blocked
+            ]
         if self.new:
             out.append("### Guides published but not indexed")
             out += [f"- [ ] {family}: [{title}]({url})" for family, title, url in self.new]

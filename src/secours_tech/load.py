@@ -132,6 +132,18 @@ def store_document(
     return len(chunks)
 
 
+def retire_unlisted(conn: psycopg.Connection, urls: set[str]) -> int:
+    """Retire official guides whose URL left the manifest (withdrawn, or replaced by a new
+    edition published at another URL), so they can no longer be cited as current."""
+    with conn.transaction():
+        cur = conn.execute(
+            "UPDATE documents SET retired_at = now()"
+            " WHERE source = 'web' AND retired_at IS NULL AND NOT (url = ANY(%s))",
+            (sorted(urls),),
+        )
+    return cur.rowcount
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Load every PDF of a folder into Postgres.")
     parser.add_argument("source", type=Path, help="folder containing PDFs (searched recursively)")
@@ -149,6 +161,8 @@ def main(argv: list[str] | None = None) -> None:
     official = {}
     if args.manifest.exists():
         official = {doc.sha256: doc for doc in Manifest.load(args.manifest).documents}
+    else:
+        log.warning("no manifest at %s: guides are loaded without official URL", args.manifest)
     with connect() as conn:
         migrate(conn)
         for pdf in pdfs:
@@ -164,6 +178,10 @@ def main(argv: list[str] | None = None) -> None:
                 log.info("%s: same text as a loaded document, skipped", pdf.name)
             else:
                 log.info("%s: %d chunks", pdf.name, count)
+        if official:
+            retired = retire_unlisted(conn, {doc.url for doc in official.values()})
+            if retired:
+                log.info("%d guide(s) no longer in the manifest, retired", retired)
 
 
 if __name__ == "__main__":

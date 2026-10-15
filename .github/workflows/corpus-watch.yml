@@ -26,7 +26,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create corpus --color 0E8A16 --description "Official doctrine corpus" --force
-          issue=$(gh issue list --label corpus --state open --json number --jq '.[0].number')
+          issue=$(gh issue list --label corpus --state open --json number --jq '.[0].number // empty')
           if [ -n "$issue" ]; then
             gh issue comment "$issue" --body-file report.md
           else

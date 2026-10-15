@@ -97,3 +97,9 @@ def test_repository_manifest_is_valid():
     m = Manifest.load(Path(__file__).parent.parent / "corpus" / "sources.toml")
     assert len(m.documents) == len({doc.url for doc in m.documents}) == 28
     assert {doc.family for doc in m.documents} == {"GDO", "GTO", "PSE", "SSUAP"}
+
+
+def test_unreachable_page_is_reported_for_a_manual_check():
+    report = check(manifest(VICIE), fetcher=lambda url: (0, None))
+    assert report.blocked == [(PAGE, 0)]
+    assert "unreachable" in report.markdown()
