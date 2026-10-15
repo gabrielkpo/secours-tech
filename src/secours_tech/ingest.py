@@ -56,9 +56,12 @@ def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
 def strip_repeated_lines(pages: list[str], min_pages: int = 3, ratio: float = 0.5) -> list[str]:
     """Remove headers and footers: short lines that appear on at least half of the pages.
 
-    Digits are masked before comparing so "Page 3" and "Page 4" count as the same line.
+    Only pages that have text count: pages left empty (routed to OCR, or blank) would otherwise
+    raise the threshold beyond reach in mostly-image guides. Digits are masked before comparing
+    so "Page 3" and "Page 4" count as the same line.
     """
-    if len(pages) < min_pages:
+    with_text = sum(1 for page in pages if page.strip())
+    if with_text < min_pages:
         return pages
 
     def key(line: str) -> str:
@@ -68,7 +71,7 @@ def strip_repeated_lines(pages: list[str], min_pages: int = 3, ratio: float = 0.
     for page in pages:
         for k in {key(line) for line in page.splitlines() if line.strip()}:
             counts[k] = counts.get(k, 0) + 1
-    threshold = max(min_pages, ratio * len(pages))
+    threshold = max(min_pages, ratio * with_text)
 
     def is_boilerplate(line: str) -> bool:
         return len(line) < 120 and counts.get(key(line), 0) >= threshold

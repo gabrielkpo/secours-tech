@@ -78,6 +78,7 @@ def _images_per_page(path: Path) -> tuple[Counter[int], Counter[int]]:
 
 def extract_pages(path: Path) -> list[Page]:
     """Every page of a PDF with its text layer and the route its text must take."""
+    path = path.resolve()  # an absolute path can never be mistaken for an option like "-q"
     parts = _run("pdftotext", "-enc", "UTF-8", str(path), "-").split("\f")
     if parts and parts[-1] == "":
         parts.pop()  # pdftotext ends every page, the last one included, with a form feed

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from secours_tech.extract import extract_pages, route, text_quality
@@ -35,3 +37,9 @@ def test_pages_are_read_with_their_route(make_pdf):
     assert [(p.number, p.route) for p in pages] == [(1, "text_layer"), (2, "blank")]
     assert "transformateur" in pages[0].text
     assert pages[1].text == ""
+
+
+def test_relative_path_starting_with_a_dash_is_read_as_a_file(make_pdf, monkeypatch):
+    pdf = make_pdf([SENTENCE], "-q.pdf")
+    monkeypatch.chdir(pdf.parent)
+    assert extract_pages(Path("-q.pdf"))[0].route == "text_layer"
