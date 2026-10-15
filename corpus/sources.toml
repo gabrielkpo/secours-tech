@@ -1,0 +1,184 @@
+# Official doctrine corpus, as published on securite-civile.interieur.gouv.fr.
+# Checked by hand on 2026-10-15. Updated by `python -m secours_tech.collect register`, reviewed in a PR.
+# The PDFs themselves are never committed (ministry terms: reproduction rights reserved).
+
+[[listing]]
+family = "GDO"
+url = "https://www.securite-civile.interieur.gouv.fr/documentation/doctrines-et-techniques-professionnelles/sapeurs-pompiers-guide-de-doctrine-operationnelle.html"
+
+[[listing]]
+family = "GTO"
+url = "https://www.securite-civile.interieur.gouv.fr/documentation/doctrines-et-techniques-professionnelles/sapeurs-pompiers-guides-de-techniques-operationnelles.html"
+
+[[listing]]
+family = "PSE"
+url = "https://www.securite-civile.interieur.gouv.fr/documentation/secourisme-et-associations/secourisme-references-techniques-nationales.html"
+include = "PSE"
+
+[[document]]
+family = "GDO"
+title = "Préparation et soutien de l'intervenant en opération"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/SOUTIEN-DE-L-INTERVENANT%202026.02.06.pdf"
+sha256 = "7bcb614749d668c9b8efd73609ef251871aec488cefc7d45ffc8d58dfdcf2ea7"
+
+[[document]]
+family = "GDO"
+title = "Opérations de secours en milieu routier"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO_OPERATIONS_MILIEU_ROUTIER_2025_DGSCGC.pdf"
+sha256 = "698cea46c3bc85348ee5f64f43fab5023ca418874a616823866639ca6289a513"
+
+[[document]]
+family = "GDO"
+title = "Opérations de secours en présence d'électricité"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Operations-Presence-Electricite.pdf"
+sha256 = "6cb8c71808deb9d803f9a0153fa933d236a4d57fb9660070dba8a0db3cdf035c"
+
+[[document]]
+family = "GDO"
+title = "Engagement des appareils télépilotés de lutte, d'appui et de secours"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Engagement-Appareils-Telepilotes-Lutte-Appui-Secours.pdf"
+sha256 = "75e674115ef68197e46f86fddcb695b9e59f62b5eb6fbe3ef32afb80240c7143"
+
+[[document]]
+family = "GDO"
+title = "Engagement des équipes cynotechniques"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Engagement-des-equipes-cynotechniques.pdf"
+sha256 = "9f0985c3d7935a30aa06a93ef624ae8816180e53547806b3d414f2b659c3b576"
+
+[[document]]
+family = "GDO"
+title = "Exercice du commandement et conduite des opérations"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Exercice-Commandement-Conduite-Operations-V2.pdf"
+sha256 = "ac60f47f7116a0e95b22c42f9146497921659d3a72c22876e9bcd27c8cfc9160"
+
+[[document]]
+family = "GDO"
+title = "Interventions à bord des bateaux en eaux intérieures"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Bateaux-Eaux-Int%C3%A9rieures-2.pdf"
+sha256 = "35acc5789d41a207e876503f00074ca25b3a3bda341d6687f1a047fd787bc6d5"
+
+[[document]]
+family = "GDO"
+title = "Interventions sur des aéronefs de type ULM"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-en-presence-ULM.pdf"
+sha256 = "7f33d22061e200605596ede10eb9d70280ab2793f0fb9ada0da5a0492ea76a17"
+
+[[document]]
+family = "GDO"
+title = "Interventions sur les incendies de structures"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Incendies-Structures.pdf"
+sha256 = "de928de93961839aa87da3a621b6419caec01c1a2ed20c8c563522ded42bf18d"
+
+[[document]]
+family = "GDO"
+title = "Interventions en milieu agricole"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Milieu-Agricole.pdf"
+sha256 = "a91d0bbab07074fe9a18b94585cc67b302f0103dd448dc68e30a0773b4fee73b"
+
+[[document]]
+family = "GDO"
+title = "Interventions en milieu périlleux et montagne"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Milieu-Perilleux-Montagne-V2.pdf"
+sha256 = "0108e89a7e70e9e9dda3d7ed22bfadfd13e23f4e9d4543fe8334e20ccc914403"
+
+[[document]]
+family = "GDO"
+title = "Interventions en milieux effondrés ou instables"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Milieux-Effondres-Ou-Instables.pdf"
+sha256 = "ee252093350ae4d4746a4ae5f352519631fd1d21af4fbb77d4f8bcaaf3ac24c7"
+
+[[document]]
+family = "GDO"
+title = "Interventions à bord des navires et bateaux en milieu maritime"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Navires-Bateaux-Milieu-Maritime.pdf"
+sha256 = "45c75beea52bc3cc557012479f95d9bbc9b30f2139c1a9665f09ec31b10fdb26"
+
+[[document]]
+family = "GDO"
+title = "Interventions en présence de gaz"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Presence-De-Gaz.pdf"
+sha256 = "1ffb930e47cce9a99b736611d0f8d61e218ca6ed0d1991fafdcc3c30b28a3a2d"
+
+[[document]]
+family = "GDO"
+title = "Interventions dans les silos"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Interventions-Silos.pdf"
+sha256 = "1ac3cb93e00e2a5844eed00598d65a5f2d824f40413b326a1847fa49b8242e42"
+
+[[document]]
+family = "GDO"
+title = "Prévention des risques liés à la toxicité des fumées"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-Prevention-Risques-Toxicite-Fumees.pdf"
+sha256 = "fa42d177001152c058cf5f95b8c9edfa0b902ca9ba353e5accac64671746b082"
+
+[[document]]
+family = "SSUAP"
+title = "Secours et soins d'urgence aux personnes (SSUAP)"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GDO-SSUAP-V1.1.pdf"
+sha256 = "cab132276efe71469082abf1dac9d44a3d5ea3301ff88b48ce12796d4884ba20"
+
+[[document]]
+family = "GDO"
+title = "Protection et sauvegarde du patrimoine culturel"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-10/GDO%20Sauvegarde%20du%20patrimoine%20V4%20juillet%202026%20sign%C3%A9.pdf"
+sha256 = "313d92f21189e711d3b1502e227a7a26fc7d67fc7fbb3c20cdd6f797713696f2"
+
+[[document]]
+family = "GTO"
+title = "Engagement en milieu vicié"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Engagement-Milieux-Vicies-V2.pdf"
+sha256 = "1295a383daf4dc3582da2c6ec098b29a31f68c9699d48d45baabc3a5e3c5fd3a"
+
+[[document]]
+family = "GTO"
+title = "Sauvegarde opérationnelle"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Sauvegarde-Operationnelle.pdf"
+sha256 = "4b5589a8c976608b3fc0a8b2fd2f9f027bc4a096321ac8e78a33400a8896a83d"
+
+[[document]]
+family = "GTO"
+title = "Sauvetages et mises en sécurité"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Sauvetages-Mise-En-Securite-V2.pdf"
+sha256 = "44fb8ad2f39b49c793204e759ef3ad920e1c1e94b553fb9d5e28d1d13b729fdb"
+
+[[document]]
+family = "GTO"
+title = "Établissements et techniques d'extinction"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Etablissement-Techniques-Extinction.pdf"
+sha256 = "356f69096e277d5d80fcb99383f1a7e7fd0ad6980fcab5a5d2560dd215f7df94"
+
+[[document]]
+family = "GTO"
+title = "Lutte contre les feux de forêts et d'espaces naturels"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Lutte-Feux-Forets-Espaces-Naturel.pdf"
+sha256 = "0aff7d8fcb8c4e484e948ca1271803e28dbb55cd41820a723c770666f2451468"
+
+[[document]]
+family = "GTO"
+title = "Secours en milieu périlleux et montagne"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Secours-Milieu-Perilleux-Montagne.pdf"
+sha256 = "0146128a5c17834f838927ccc5e26aecd2d346769532f8d06f52f2306923cfb2"
+
+[[document]]
+family = "GTO"
+title = "Secours en milieux effondrés ou instables"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Secours-milieux-Effondres-Instables.pdf"
+sha256 = "c88ae815300aa26afee0fecfd9606534a145b9fca5d10bf586c00aa4f32ade42"
+
+[[document]]
+family = "GTO"
+title = "Ventilation opérationnelle"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/GTO-Ventilation-Operationnelle.pdf"
+sha256 = "b481784608b85f9fb54bbb4fb7e94ce5874edb666fb665136c88a20ef0f1f344"
+
+[[document]]
+family = "PSE"
+title = "Références techniques nationales - Premiers secours en équipe"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-07/References-techniques-nationales-PSE_juillet-2026.pdf"
+sha256 = "2b60d2fcdaecf1ff279730d06d93427ee7384cd29d81ba9fa92ad3ed7d9c82bc"
+
+[[document]]
+family = "PSE"
+title = "Logigrammes PSE"
+url = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents/2026-09/Logigrammes%20PSE.pdf"
+sha256 = "3cabf1d86698cc53aa3fd26af181abbf00e27c4483fcc998f78c9b16b52e7f30"
