@@ -20,9 +20,13 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
   evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.
-- **Full-text vector computed by Postgres** (`tsv`, French configuration), so it cannot drift
-  from the chunk text. The French stemmer handles nouns and infinitives ("ventilation" finds
+- **Full-text vector computed by Postgres** (`tsv`, text search configuration `fr`: `unaccent`
+  then the French stemmer), so it cannot drift from the chunk text and "electricite" finds
+  "électricité". The French stemmer handles nouns and infinitives ("ventilation" finds
   "ventiler") but not every conjugated form ("ventilent"): semantic search covers that gap.
+  Queries use `websearch_to_tsquery`, which never fails on free text.
+- **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
+  effect of OCR on retrieval and citations can be measured.
 - **Textless pages are measured, not hidden.** `textless_page_count` counts pages that give no
   chunk. On the 29 current guides it is 758 of 3,139 pages (24%): many guides draw their text
   as images. OCR is what fixes it.

@@ -2,6 +2,13 @@
 -- the evaluation runs, so the dashboard can join them.
 
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+-- French full text that ignores accents: firefighters often type "electricite" for
+-- "électricité". unaccent runs before the French stemmer on every word.
+CREATE TEXT SEARCH CONFIGURATION fr (COPY = french);
+ALTER TEXT SEARCH CONFIGURATION fr
+    ALTER MAPPING FOR hword, hword_part, word WITH unaccent, french_stem;
 
 CREATE TABLE documents (
     id                 bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -28,8 +35,10 @@ CREATE TABLE chunks (
     page        integer NOT NULL CHECK (page > 0),  -- 1-based, as printed in a PDF viewer
     position    integer NOT NULL CHECK (position >= 0),  -- order of the chunk in its document
     text        text NOT NULL CHECK (text <> ''),
+    -- how the text was obtained: the PDF text layer, or OCR of a page drawn as images
+    extraction  text NOT NULL DEFAULT 'text_layer' CHECK (extraction IN ('text_layer', 'ocr')),
     -- full-text search vector, computed by Postgres so it can never drift from `text`
-    tsv         tsvector GENERATED ALWAYS AS (to_tsvector('french', text)) STORED,
+    tsv         tsvector GENERATED ALWAYS AS (to_tsvector('fr', text)) STORED,
     -- mistral-embed returns 1024 numbers; filled by the embedding step, empty until then
     embedding   vector(1024),
     created_at  timestamptz NOT NULL DEFAULT now(),

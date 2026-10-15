@@ -85,6 +85,22 @@ def test_full_text_search_finds_french_word_forms(conn):
         SourceDocument("GTO-test.pdf", "b" * 64, ["Ventiler le local avant d'entrer."]),
     )
     hit = conn.execute(
-        "SELECT count(*) FROM chunks WHERE tsv @@ plainto_tsquery('french', 'ventilation')"
+        "SELECT count(*) FROM chunks WHERE tsv @@ websearch_to_tsquery('fr', 'ventilation')"
     ).fetchone()[0]
     assert hit == 1
+
+
+def test_full_text_search_ignores_accents(conn):
+    store_document(
+        conn,
+        SourceDocument("GDO-test.pdf", "c" * 64, ["Couper l'électricité avant d'intervenir."]),
+    )
+    hit = conn.execute(
+        "SELECT count(*) FROM chunks WHERE tsv @@ websearch_to_tsquery('fr', 'electricite')"
+    ).fetchone()[0]
+    assert hit == 1
+
+
+def test_chunks_record_how_their_text_was_extracted(conn):
+    store_document(conn, DOC)
+    assert conn.execute("SELECT DISTINCT extraction FROM chunks").fetchall() == [("text_layer",)]
