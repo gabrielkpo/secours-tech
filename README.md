@@ -7,7 +7,7 @@ An assistant for French firefighters that answers operational questions **only f
 doctrine** (GDO, GTO, SSUAP, PSE), **cites the guide and page** behind every claim, and refuses
 when the doctrine does not cover the question.
 
-> **Status: early stage (milestone 1 of 11), expect breaking changes.** PDF ingestion and CI are
+> **Status: early stage (milestone 1 of 12), expect breaking changes.** PDF ingestion and CI are
 > on `main`; the Postgres index is in review; retrieval, generation and the API are not built yet.
 > Personal project, not validated by the French civil protection: it does not replace training or
 > command. See [Status / Roadmap](#status--roadmap).
@@ -15,7 +15,7 @@ when the doctrine does not cover the question.
 ## Why
 
 A firefighter, trainer or trainee has a precise question ("safety perimeter around a high-voltage
-line?", "what to do in a silo?"). The answer sits in national guides of 50 to 400 pages, published
+line?", "what to do in a silo?"). The answer sits in national guides of up to 400 pages, published
 as PDFs. Searching them takes time, and an approximate answer can be dangerous.
 
 A general-purpose LLM answers fluently but invents figures and cannot say which page it relied on.
@@ -23,8 +23,8 @@ SecoursTech takes the opposite stance: an answer is shown only if every quoted p
 **word for word** in the retrieved doctrine, otherwise it refuses and says why.
 
 **Why a rebuild.** v2 called the LLM from the browser, which exposed the API key in the JS
-bundle, and committed 170+ MB of PDFs. v3 starts from scratch: the key stays on the server, the
-API is rate-limited and the documents are never stored in Git.
+bundle, and committed 170+ MB of PDFs. v3 starts from scratch and keeps the documents out of Git;
+the API it will expose keeps the key on the server and is rate-limited by design.
 
 ## How it works
 
@@ -111,6 +111,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J8 Public MCP | `ask_doctrine`, `search_doctrine` (read-only) | planned |
 | J9 Observability | Metrics, alerts, dashboard | planned |
 | J10 Final evaluation | 60 to 100 cases, frozen test split, results in this README | planned |
+| J11 Comparison | Same pipeline built with Mistral's managed tools (Document Library, OCR), scored on the same bench | planned |
 
 **Evaluation plan.** Questions, expected facts and expected pages are written by hand from the
 guides **before** the system runs, and are never shown to the model. Each case runs 3 times. Planned
@@ -164,8 +165,8 @@ every page with no extractable text. `.env.example` lists the variables the next
 - **Image-only pages.** On the 29 guides used locally, 758 of 3,139 pages (24 %) yield no chunk:
   in ten guides each line of text is stored as an image, and 174 pages are truly blank (measured
   in [#13](https://github.com/gabrielkpo/secours-tech/pull/13)). OCR is the next step.
-- **Extraction noise.** `pypdf` inserts stray spaces ("cohérence ," or "pr océdures", visible in
-  the example chunk); a cleaner per-page extractor is planned with the OCR work.
+- **Extraction noise.** `pypdf` inserts stray spaces in about 5 % of the chunks ("cohérence ,",
+  "pr océdures"); a cleaner per-page extractor is planned with the OCR work.
 - **No answers yet.** Retrieval, generation and the citation check are designed but not built,
   so there are no results to report.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
@@ -175,7 +176,8 @@ every page with no extractable text. `.env.example` lists the variables the next
 
 ```bash
 uv sync --locked
-uvx pre-commit install   # ruff (through uv, locked version) and gitleaks before each commit
+uv tool install pre-commit
+pre-commit install       # ruff (through uv, locked version) and gitleaks before each commit
 uv run pytest
 ```
 
