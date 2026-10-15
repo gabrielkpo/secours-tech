@@ -1,5 +1,7 @@
 # SecoursTech
 
+[![CI](https://github.com/gabrielkpo/secours-tech/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/secours-tech/actions/workflows/ci.yml)
+
 Assistant that answers operational questions from the official French firefighter doctrine
 (GDO, GTO, SSUAP), and **always cites the document and page** it relied on.
 
@@ -18,3 +20,8 @@ uv run pytest
 ```
 The ingestion step cuts on sentence boundaries, drops repeated headers and footers, and logs a
 warning for every page with no extractable text (scanned pages need OCR, not handled yet).
+
+## License
+The code is released under the [MIT License](LICENSE). The doctrine documents are not part of
+this repository: they are published by the French Ministry of the Interior, whose reproduction
+rights are reserved and strictly limited, and they may not be used for commercial purposes.
