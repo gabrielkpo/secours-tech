@@ -5,7 +5,14 @@
       "release-type": "python",
       "package-name": "secours-tech",
       "include-v-in-tag": true,
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='secours-tech')].version"
+        }
+      ]
     }
   }
 }
