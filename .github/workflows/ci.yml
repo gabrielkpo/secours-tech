@@ -36,7 +36,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: data/tessdata
-          key: tessdata-fra-907743d98915
+          key: tessdata-fra-${{ hashFiles('src/secours_tech/ocr.py') }}  # new pin, new cache
       - run: uv run python -c "from secours_tech.ocr import fetch_model; fetch_model()"
       - run: uv run ruff check .
       - run: uv run ruff format --check .
