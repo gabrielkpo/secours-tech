@@ -48,5 +48,9 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   sample of its pages passes `python -m secours_tech.ocr_bench score`: every number read exactly
   (none missing, none added) and a character error rate of at most 1 %. Otherwise the guide
   stays uncovered. Only pages with text drawn as images are sampled and can be indexed; image
-  pages (photos, diagrams) are OCRed for measurement but stay uncovered. Transcriptions live outside Git (`data/ocr-reference/`): they are doctrine
-  text.
+  pages (photos, diagrams) are OCRed for measurement but stay uncovered. The score compares
+  text, not layout: the running footer is removed from the OCR text the way chunking removes
+  it (lines repeated on half the pages, compared by their words so logo noise such as "@&"
+  does not hide them), and list bullets, read by the OCR as a lone "e", "o" or dash, are
+  ignored on both sides. Transcriptions live outside Git (`data/ocr-reference/`): they are
+  doctrine text.

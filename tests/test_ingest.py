@@ -61,3 +61,16 @@ def test_header_is_removed_even_when_most_pages_are_empty():
     cleaned = strip_repeated_lines(pages)
     assert "GDO GAZ" not in "".join(cleaned)
     assert cleaned[-1] == "Éclairer."
+
+
+def test_ocr_footer_is_removed_despite_logo_noise():
+    footer = "DIRECTION GÉNÉRALE DE LA SÉCURITÉ CIVILE ET DE LA GESTION DES CRISES"
+    noise = ["@&", "À\\ /", "", "@æ)"]
+    bodies = ["Ventiler le local.", "Couper le gaz.", "Baliser la zone.", "Éclairer."]
+    pages = [f"{body}\n{n} {footer}".strip() for body, n in zip(bodies, noise, strict=True)]
+    assert strip_repeated_lines(pages) == bodies
+
+
+def test_lines_without_words_are_never_taken_for_a_footer():
+    pages = [f"Étape {i}.\n1 2 3" for i in range(4)]
+    assert all("1 2 3" in page for page in strip_repeated_lines(pages))
