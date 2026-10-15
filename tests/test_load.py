@@ -9,6 +9,7 @@ from secours_tech.load import (
     SourceDocument,
     family_of,
     is_loaded,
+    read_source,
     store_document,
     sync_with_manifest,
     title_of,
@@ -164,3 +165,10 @@ def test_sync_keeps_only_the_listed_edition_current(conn):
     assert sync_with_manifest(conn, [Entry("GDO", "Silos", url, edition_2.sha256)]) == (0, 0)
     current = conn.execute("SELECT version FROM documents WHERE retired_at IS NULL").fetchall()
     assert current == [(2,)]
+
+
+def test_pages_are_stored_with_their_route(conn, make_pdf):
+    pdf = make_pdf(["Ventiler le local avant d'entrer dans le silo.", ""], "GDO-Silos.pdf")
+    store_document(conn, read_source(pdf, pdf.read_bytes()))
+    rows = conn.execute("SELECT page, route FROM pages ORDER BY page").fetchall()
+    assert rows == [(1, "text_layer"), (2, "blank")]

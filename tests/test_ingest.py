@@ -53,3 +53,11 @@ def test_empty_page_is_reported(caplog):
         chunks = pages_to_chunks("scan.pdf", ["Some text.", "   "])
     assert [c.page for c in chunks] == [1]
     assert "scan.pdf page 2 has no extractable text" in caplog.text
+
+
+def test_header_is_removed_even_when_most_pages_are_empty():
+    bodies = ["Ventiler.", "Couper le gaz.", "Baliser la zone.", "Éclairer."]
+    pages = [""] * 8 + [f"GDO GAZ 2019\n{body}" for body in bodies]
+    cleaned = strip_repeated_lines(pages)
+    assert "GDO GAZ" not in "".join(cleaned)
+    assert cleaned[-1] == "Éclairer."
