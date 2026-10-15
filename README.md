@@ -102,7 +102,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | Milestone | Content | State |
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
-| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader and per-page routing merged; OCR next |
+| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing and OCR merged; per-guide OCR validation next |
 | J2 Evaluation set v1 | 30 questions with expected answers and pages, written before any run | planned |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
@@ -123,7 +123,7 @@ out-of-scope question answered, individual medical advice) must stay at 0. Basel
 
 ## Run it
 
-Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler (`pdftotext`), and the official PDFs in
+Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract, and the official PDFs in
 `data/raw/` (not distributed here; see [Data and privacy](#data-and-privacy)).
 
 ```bash
@@ -166,7 +166,8 @@ milestones need (server side only).
 
 - **Pages waiting for OCR.** Of the 2,993 pages of the 28 official guides, 1,069 are routed to
   OCR (in 12 guides each line of text is drawn as an image; others are image pages) and 184 are
-  blank. Until OCR lands, those pages give no chunk.
+  blank. Their OCR text (Tesseract, French model) is stored but indexed guide by guide, only
+  once a hand-checked sample reads every number right and 99 % of the characters.
 - **No answers yet.** Retrieval, generation and the citation check are designed but not built,
   so there are no results to report.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice

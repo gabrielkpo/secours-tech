@@ -41,3 +41,11 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked
   or differs from the manifest. A person downloads the PDFs in a browser and `collect register`
   files them and updates the manifest.
+- **OCR is stored, then gated.** `python -m secours_tech.ocr` renders each page routed to `ocr`
+  at 300 dpi (`pdftoppm`) and reads it with Tesseract 5 (LSTM) and the French `tessdata_best`
+  model, pinned to one commit and checked by SHA-256. Text and mean word confidence go on the
+  page row; nothing is indexed yet. A guide's OCR text becomes chunks only if a hand-transcribed
+  sample of its pages passes `python -m secours_tech.ocr_bench score`: every number read exactly
+  (none missing, none added) and a character error rate of at most 1 %. Otherwise the guide
+  stays uncovered. Transcriptions live outside Git (`data/ocr-reference/`): they are doctrine
+  text.

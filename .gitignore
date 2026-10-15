@@ -12,3 +12,7 @@ __pycache__/
 .DS_Store
 # local learning profile (VibeWise), personal to each developer
 .vibe-wise/
+# French OCR model (tessdata_best, pinned and checked by secours_tech.ocr)
+data/tessdata/
+# hand transcriptions of OCR sample pages: doctrine text, kept out of the public repository
+data/ocr-reference/
