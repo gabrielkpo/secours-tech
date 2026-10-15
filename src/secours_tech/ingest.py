@@ -57,15 +57,18 @@ def strip_repeated_lines(pages: list[str], min_pages: int = 3, ratio: float = 0.
     """Remove headers and footers: short lines that appear on at least half of the pages.
 
     Only pages that have text count: pages left empty (routed to OCR, or blank) would otherwise
-    raise the threshold beyond reach in mostly-image guides. Digits are masked before comparing
-    so "Page 3" and "Page 4" count as the same line.
+    raise the threshold beyond reach in mostly-image guides. Lines are compared by their words of
+    three letters or more, so "Page 3" and "Page 4" count as the same line, and so does an OCR'd
+    footer next to a logo read as "@&" on one page and "À\\" on the next. A line without such
+    words (a bare page number) is compared with its digits masked.
     """
     with_text = sum(1 for page in pages if page.strip())
     if with_text < min_pages:
         return pages
 
     def key(line: str) -> str:
-        return re.sub(r"\d+", "#", line.strip())
+        words = re.findall(r"[^\W\d_]{3,}", line)
+        return " ".join(words) if words else re.sub(r"\d+", "#", line.strip())
 
     counts: dict[str, int] = {}
     for page in pages:

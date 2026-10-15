@@ -67,3 +67,9 @@ def test_a_rendered_page_is_read_back(make_pdf):
     assert "10" in result.text
     assert "transformateur" in result.text
     assert result.confidence > 50
+
+
+def test_normalize_ignores_list_bullets_read_by_the_ocr():
+    ocr = "e ne pas dégrader la protection ;\no couper le gaz ;\n- baliser."
+    assert normalize(ocr) == normalize("ne pas dégrader la protection ;\ncouper le gaz ;\nbaliser.")
+    assert normalize("à proposer un dispositif") == "à proposer un dispositif"

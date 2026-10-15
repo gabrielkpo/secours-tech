@@ -184,3 +184,15 @@ def test_ocr_sample_only_draws_pages_with_text_drawn_as_images(conn):
     )
     store_document(conn, SourceDocument("GTO-test.pdf", "a" * 64, ["", ""], pages))
     assert sample(conn, per_guide=5, seed=1) == {"GTO-test.pdf": [1]}
+
+
+def test_ocr_bench_reads_ocr_text_without_its_running_footer(conn):
+    from secours_tech.ocr_bench import ocr_pages
+
+    pages = tuple(Page(i, "", "ocr", 120, 25, 26, 1.0) for i in range(1, 5))
+    store_document(conn, SourceDocument("GTO-test.pdf", "a" * 64, [""] * 4, pages))
+    footer = "@& DIRECTION GÉNÉRALE DE LA SÉCURITÉ CIVILE ET DE LA GESTION DES CRISES"
+    bodies = {1: "Ventiler.", 2: "Couper le gaz.", 3: "Baliser la zone.", 4: "Éclairer."}
+    for page, body in bodies.items():
+        conn.execute("UPDATE pages SET ocr_text = %s WHERE page = %s", (f"{body}\n{footer}", page))
+    assert ocr_pages(conn, "GTO-test.pdf") == bodies

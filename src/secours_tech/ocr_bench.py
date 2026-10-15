@@ -23,16 +23,23 @@ from pathlib import Path
 
 from secours_tech.db import connect
 from secours_tech.extract import MIN_TEXT_MASKS
+from secours_tech.ingest import strip_repeated_lines
 
 REFERENCES = Path("data/ocr-reference")
 MAX_CER = 0.01
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+_BULLET = re.compile(r"^\s*[•●▪■◦○·*°eo\-–—]\s+")
 _QUOTES = str.maketrans({"’": "'", "‘": "'", "«": '"', "»": '"', " ": " ", " ": " "})
 
 
 def normalize(text: str) -> str:
-    """Compare text, not layout: same quotes, single spaces, no line breaks."""
-    return " ".join(text.translate(_QUOTES).split())
+    """Compare text, not layout: same quotes, no list bullets, single spaces, no line breaks.
+
+    Transcriptions leave bullets out; the OCR reads them as a lone "e", "o", "*" or dash at the
+    start of the line, which would count as errors on every list item.
+    """
+    lines = (_BULLET.sub("", line) for line in text.translate(_QUOTES).splitlines())
+    return " ".join(" ".join(lines).split())
 
 
 def edit_distance(a: str, b: str) -> int:
@@ -107,6 +114,22 @@ def sample(conn, per_guide: int, seed: int) -> dict[str, list[int]]:
     }
 
 
+def ocr_pages(conn, filename: str) -> dict[int, str]:
+    """OCR text of a current guide's pages, without its running headers and footers.
+
+    The repeated lines are found across all the guide's OCR pages with the function chunking
+    uses on a guide's text pages; transcriptions leave them out.
+    """
+    rows = conn.execute(
+        "SELECT p.page, p.ocr_text FROM pages p JOIN documents d ON d.id = p.document_id"
+        " WHERE d.filename = %s AND d.retired_at IS NULL AND p.ocr_text IS NOT NULL"
+        " ORDER BY p.page",
+        (filename,),
+    ).fetchall()
+    cleaned = strip_repeated_lines([text for _, text in rows])
+    return {page: text for (page, _), text in zip(rows, cleaned, strict=True)}
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Check OCR reliability against hand transcriptions."
@@ -137,19 +160,18 @@ def main(argv: list[str] | None = None) -> None:
             return
 
         guides: dict[str, GuideScore] = {}
+        ocr_by_guide: dict[str, dict[int, str]] = {}
         for reference in sorted(args.references.glob("*/p*.txt")):
             page = int(reference.stem[1:])
-            row = conn.execute(
-                "SELECT d.filename, p.ocr_text FROM pages p JOIN documents d"
-                " ON d.id = p.document_id WHERE d.filename = %s AND p.page = %s"
-                " AND d.retired_at IS NULL",
-                (f"{reference.parent.name}.pdf", page),
-            ).fetchone()
-            if row is None or row[1] is None:
+            filename = f"{reference.parent.name}.pdf"
+            if filename not in ocr_by_guide:
+                ocr_by_guide[filename] = ocr_pages(conn, filename)
+            ocr = ocr_by_guide[filename].get(page)
+            if ocr is None:
                 print(f"no OCR text yet for {reference}")
                 continue
-            guide = guides.setdefault(row[0], GuideScore(row[0]))
-            guide.pages.append(score_page(page, reference.read_text(encoding="utf-8"), row[1]))
+            guide = guides.setdefault(filename, GuideScore(filename))
+            guide.pages.append(score_page(page, reference.read_text(encoding="utf-8"), ocr))
 
     for guide in guides.values():
         verdict = "PASS" if guide.passed else "FAIL"
