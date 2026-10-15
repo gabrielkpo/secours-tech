@@ -3,7 +3,7 @@
 [![CI](https://github.com/gabrielkpo/secours-tech/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/secours-tech/actions/workflows/ci.yml)
 
 Assistant that answers operational questions from the official French firefighter doctrine
-(GDO, GTO, SSUAP), and **always cites the document and page** it relied on.
+(GDO, GTO, SSUAP, PSE), and **always cites the document and page** it relied on.
 
 > Status: work in progress (v3, rebuilt from scratch). See `docs/architecture.md`.
 
@@ -14,7 +14,7 @@ downloads the documents at build time.
 
 ## Quick start
 ```
-uv sync --group dev
+uv sync --locked      # installs the exact versions in uv.lock, dev tools included
 uv run python -m secours_tech.ingest path/to/pdfs data/index/chunks.jsonl
 uv run pytest
 ```
