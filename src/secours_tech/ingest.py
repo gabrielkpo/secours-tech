@@ -87,9 +87,13 @@ def pages_to_chunks(document: str, page_texts: list[str], size: int = 800) -> li
     return chunks
 
 
+def read_pages(path: Path) -> list[str]:
+    """Raw text of every page, in order. A scanned page gives an empty string."""
+    return [page.extract_text() or "" for page in PdfReader(path).pages]
+
+
 def ingest_pdf(path: Path, size: int = 800) -> list[Chunk]:
-    reader = PdfReader(path)
-    return pages_to_chunks(path.name, [page.extract_text() or "" for page in reader.pages], size)
+    return pages_to_chunks(path.name, read_pages(path), size)
 
 
 def main(argv: list[str] | None = None) -> None:
