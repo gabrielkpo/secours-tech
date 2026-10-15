@@ -3,8 +3,16 @@ import os
 import psycopg
 import pytest
 
+from secours_tech.collect import Entry
 from secours_tech.db import migrate
-from secours_tech.load import SourceDocument, family_of, is_loaded, store_document, title_of
+from secours_tech.load import (
+    SourceDocument,
+    family_of,
+    is_loaded,
+    store_document,
+    sync_with_manifest,
+    title_of,
+)
 
 
 @pytest.mark.parametrize(
@@ -120,3 +128,39 @@ def test_two_different_fully_scanned_guides_are_both_loaded(conn):
     assert store_document(conn, scan_a) == 0
     assert store_document(conn, scan_b) == 0
     assert conn.execute("SELECT count(*) FROM documents").fetchone()[0] == 2
+
+
+def test_official_guide_takes_its_family_title_and_url_from_the_manifest(conn):
+    entry = Entry("GDO", "Interventions dans les silos", "https://example.org/silos.pdf", "a" * 64)
+    store_document(conn, DOC, entry)
+    row = conn.execute("SELECT family, title, source, url, version FROM documents").fetchone()
+    assert row == ("GDO", "Interventions dans les silos", "web", "https://example.org/silos.pdf", 1)
+
+
+def test_a_new_edition_at_the_same_url_retires_the_previous_one(conn):
+    url = "https://example.org/silos.pdf"
+    store_document(conn, DOC, Entry("GDO", "Silos", url, DOC.sha256))
+    edition_2 = SourceDocument(DOC.filename, "9" * 64, ["Silo safety distance is 60 m."])
+    assert store_document(conn, edition_2, Entry("GDO", "Silos", url, edition_2.sha256)) == 1
+    rows = conn.execute(
+        "SELECT version, retired_at IS NOT NULL FROM documents ORDER BY version"
+    ).fetchall()
+    assert rows == [(1, True), (2, False)]
+
+
+def test_the_manifest_decides_which_guides_are_current(conn):
+    silos = Entry("GDO", "Silos", "https://example.org/silos.pdf", DOC.sha256)
+    store_document(conn, DOC, silos)
+    assert sync_with_manifest(conn, []) == (1, 0)  # dropped from the manifest: retired
+    assert sync_with_manifest(conn, [silos]) == (0, 1)  # put back: restored
+    assert conn.execute("SELECT retired_at IS NULL FROM documents").fetchone() == (True,)
+
+
+def test_sync_keeps_only_the_listed_edition_current(conn):
+    url = "https://example.org/silos.pdf"
+    store_document(conn, DOC, Entry("GDO", "Silos", url, DOC.sha256))
+    edition_2 = SourceDocument(DOC.filename, "9" * 64, ["Silo safety distance is 60 m."])
+    store_document(conn, edition_2, Entry("GDO", "Silos", url, edition_2.sha256))
+    assert sync_with_manifest(conn, [Entry("GDO", "Silos", url, edition_2.sha256)]) == (0, 0)
+    current = conn.execute("SELECT version FROM documents WHERE retired_at IS NULL").fetchall()
+    assert current == [(2,)]

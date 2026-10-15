@@ -10,6 +10,7 @@ from pathlib import Path
 
 import psycopg
 
+from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
 from secours_tech.ingest import pages_to_chunks, read_pages
 
@@ -71,37 +72,56 @@ def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
     )
 
 
-def store_document(conn: psycopg.Connection, doc: SourceDocument) -> int | None:
+def store_document(
+    conn: psycopg.Connection, doc: SourceDocument, entry: Entry | None = None
+) -> int | None:
     """Insert a document and its chunks in one transaction.
 
+    `entry` is the manifest record of an official guide (family, title, URL). When a current
+    version with the same URL exists, it is retired and the new row gets the next version.
     Returns the number of chunks, or None when a file with the same bytes or the same extracted
     text is already loaded, so running the loader twice changes nothing.
     """
     with conn.transaction():
+        duplicate = conn.execute(
+            "SELECT 1 FROM documents WHERE sha256 = %s OR content_sha256 = %s",
+            (doc.sha256, doc.content_sha256),
+        ).fetchone()
+        if duplicate:
+            return None
         chunks = pages_to_chunks(doc.filename, doc.page_texts)
         # a page "without text" is one that gives no chunk, not only a blank page: many guides
         # draw their text as images and only the page number survives the extraction
         textless = len(doc.page_texts) - len({chunk.page for chunk in chunks})
+        version = 1
+        if entry is not None:
+            previous = conn.execute(
+                "UPDATE documents SET retired_at = now()"
+                " WHERE url = %s AND retired_at IS NULL RETURNING version",
+                (entry.url,),
+            ).fetchone()
+            if previous:
+                version = previous[0] + 1
         row = conn.execute(
             """
-            INSERT INTO documents (filename, title, family, source, sha256, content_sha256,
-                                   page_count, textless_page_count)
-            VALUES (%s, %s, %s, 'local', %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
+            INSERT INTO documents (filename, title, family, source, url, sha256, content_sha256,
+                                   version, page_count, textless_page_count)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
                 doc.filename,
-                title_of(doc.filename),
-                family_of(doc.filename),
+                entry.title if entry else title_of(doc.filename),
+                entry.family if entry else family_of(doc.filename),
+                "web" if entry else "local",
+                entry.url if entry else None,
                 doc.sha256,
                 doc.content_sha256,
+                version,
                 len(doc.page_texts),
                 textless,
             ),
         ).fetchone()
-        if row is None:
-            return None
         # COPY streams all rows in one round trip: thousands of chunks load in about a second
         with (
             conn.cursor() as cur,
@@ -112,9 +132,34 @@ def store_document(conn: psycopg.Connection, doc: SourceDocument) -> int | None:
     return len(chunks)
 
 
+def sync_with_manifest(conn: psycopg.Connection, entries: list[Entry]) -> tuple[int, int]:
+    """Make the manifest decide which official guides are current.
+
+    A row is current exactly when its (URL, SHA-256) is in the manifest: a guide dropped from it
+    (withdrawn, or replaced by an edition at another URL) is retired, and a guide put back is
+    restored. Returns (retired, restored).
+    """
+    listed = ([entry.url for entry in entries], [entry.sha256 for entry in entries])
+    pairs = "(url, sha256) IN (SELECT * FROM unnest(%s::text[], %s::text[]))"
+    with conn.transaction():
+        retired = conn.execute(
+            "UPDATE documents SET retired_at = now()"
+            f" WHERE source = 'web' AND retired_at IS NULL AND NOT {pairs}",
+            listed,
+        ).rowcount
+        restored = conn.execute(
+            f"UPDATE documents SET retired_at = NULL WHERE source = 'web' AND retired_at IS NOT NULL AND {pairs}",
+            listed,
+        ).rowcount
+    return retired, restored
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Load every PDF of a folder into Postgres.")
     parser.add_argument("source", type=Path, help="folder containing PDFs (searched recursively)")
+    parser.add_argument(
+        "--manifest", type=Path, default=MANIFEST, help="official sources (family, title, URL)"
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -123,20 +168,30 @@ def main(argv: list[str] | None = None) -> None:
     pdfs = sorted(args.source.rglob("*.pdf"))
     if not pdfs:
         raise SystemExit(f"no PDF found in {args.source}")
+    official = {}
+    if args.manifest.exists():
+        official = {doc.sha256: doc for doc in Manifest.load(args.manifest).documents}
+    else:
+        log.warning("no manifest at %s: guides are loaded without official URL", args.manifest)
     with connect() as conn:
         migrate(conn)
         for pdf in pdfs:
             data = pdf.read_bytes()
+            sha = sha256_of(data)
             # check the fingerprint before parsing: a rerun skips loaded files without the
             # extraction cost
-            if is_loaded(conn, sha256_of(data)):
+            if is_loaded(conn, sha):
                 log.info("%s: already loaded, skipped", pdf.name)
                 continue
-            count = store_document(conn, read_source(pdf.name, data))
+            count = store_document(conn, read_source(pdf.name, data), official.get(sha))
             if count is None:
                 log.info("%s: same text as a loaded document, skipped", pdf.name)
             else:
                 log.info("%s: %d chunks", pdf.name, count)
+        if official:
+            retired, restored = sync_with_manifest(conn, list(official.values()))
+            if retired or restored:
+                log.info("manifest sync: %d guide(s) retired, %d restored", retired, restored)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,35 @@
+name: Corpus watch
+# Once a month, compare the official doctrine pages with corpus/sources.toml. The site answers
+# 403 to automated clients and the bot does not pretend to be a browser, so a blocked page or
+# a difference opens (or updates) a "corpus" issue for a person to check by hand.
+on:
+  schedule:
+    - cron: "0 6 1 * *"  # 1st of each month, 06:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # setup-uv publishes no moving major tag, so it is pinned to the v10.3.0 commit
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - id: check
+        run: uv run python -m secours_tech.collect check --report report.md
+      - if: steps.check.outputs.action == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create corpus --color 0E8A16 --description "Official doctrine corpus" --force
+          issue=$(gh issue list --label corpus --state open --json number --jq '.[0].number // empty')
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body-file report.md
+          else
+            gh issue create --title "Corpus: check the official doctrine pages" \
+              --label corpus --body-file report.md
+          fi

@@ -23,8 +23,8 @@ SecoursTech takes the opposite stance: an answer is shown only if every quoted p
 **word for word** in the retrieved doctrine, otherwise it refuses and says why.
 
 **Why a rebuild.** v2 called the LLM from the browser, which exposed the API key in the JS
-bundle, and committed 170+ MB of PDFs. v3 starts from scratch and keeps the documents out of Git;
-the API it will expose keeps the key on the server and is rate-limited by design.
+bundle, and committed 170+ MB of PDFs. v3 starts over: documents stay out of Git, and the planned API keeps
+the key server-side behind a rate limit.
 
 ## How it works
 
@@ -32,7 +32,7 @@ Request path. Solid boxes exist on `main`; dashed boxes are the target design, n
 
 ```mermaid
 flowchart LR
-    A["Official PDFs<br/>(interieur.gouv.fr)"] --> B["secours_tech.ingest<br/>text per page"]
+    A["Official PDFs<br/>(corpus/sources.toml)"] --> B["secours_tech.ingest<br/>text per page"]
     B --> C["chunks<br/>(document, page, text)"]
     C --> D[("Postgres + pgvector<br/>chunks, French full text<br/>(embeddings: next)")]
     Q["Question"] --> G["Input guardrails<br/>length, scope"]
@@ -71,8 +71,9 @@ flowchart LR
   and it also protects the integrity of the official text.
 - **Ready-made Mistral models** (`mistral-embed`, generation) rather than a fine-tuned model:
   no training data is needed and the evaluation measures the whole system.
-- **Documents fetched, not committed**: smaller repository, no redistribution of the guides, at
-  the cost of a download step (a scraper is planned; today the PDFs are placed in `data/raw/`).
+- **Documents listed, not committed**: `corpus/sources.toml` records each official URL and
+  fingerprint. The ministry's site blocks bots, and the monthly watch does not pose as a browser:
+  it opens an issue, a person downloads the PDFs, `collect register` files them.
 
 ## Example
 
@@ -106,7 +107,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
-| J6 Collection | Scraper of the official pages, versions, weekly job | planned |
+| J6 Collection | Sources manifest, monthly watch, versions | done; downloads stay manual |
 | J7 Production | Docker, server, HTTPS, CD with staging | planned |
 | J8 Public MCP | `ask_doctrine`, `search_doctrine` (read-only) | planned |
 | J9 Observability | Metrics, alerts, dashboard | planned |
@@ -118,9 +119,7 @@ guides **before** the system runs, and are never shown to the model. Each case r
 measures: whether the right page is in the top 5 retrieved chunks, answer accuracy graded by hand,
 rate of citations that pass the equality check, correct refusals on out-of-scope questions,
 latency and cost per question. Serious faults (invented citation, figure absent from the sources,
-out-of-scope question answered, individual medical advice) must stay at 0. Baselines: the LLM
-alone without retrieval, then each retrieval variant, and at the end the same pipeline built with
-Mistral's managed tools.
+out-of-scope question answered, individual medical advice) must stay at 0. Baselines: the LLM alone without retrieval, then each retrieval variant.
 
 ## Run it
 
@@ -145,6 +144,7 @@ milestones need (server side only).
 | `src/secours_tech/ingest.py` | PDF text per page, header and footer removal, sentence-aware chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
+| `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
 | `docs/architecture.md` | Architecture decisions |
 | `data/` | Local PDFs and generated index, ignored by Git |
 | `.github/` | CI, secret scan, CodeQL, PR title check, Dependabot, release-please |
