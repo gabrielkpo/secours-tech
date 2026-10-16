@@ -12,7 +12,7 @@ import psycopg
 from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
 from secours_tech.extract import Page, extract_pages
-from secours_tech.ingest import pages_to_chunks
+from secours_tech.ingest import Chunk, pages_to_chunks
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +74,24 @@ def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
     )
 
 
+def _textless_pages(doc: SourceDocument, chunks: list[Chunk]) -> int:
+    # a page "without text" is one that gives no chunk, not only a blank page: many guides
+    # draw their text as images and only the page number survives the extraction
+    return len(doc.page_texts) - len({chunk.page for chunk in chunks})
+
+
+def _copy_chunks(
+    conn: psycopg.Connection, document_id: int, chunks: list[Chunk], start: int = 0
+) -> None:
+    # COPY streams all rows in one round trip: thousands of chunks load in about a second
+    with (
+        conn.cursor() as cur,
+        cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
+    ):
+        for position, chunk in enumerate(chunks, start=start):
+            copy.write_row((document_id, chunk.page, position, chunk.text))
+
+
 def store_document(
     conn: psycopg.Connection, doc: SourceDocument, entry: Entry | None = None
 ) -> int | None:
@@ -92,9 +110,7 @@ def store_document(
         if duplicate:
             return None
         chunks = pages_to_chunks(doc.filename, doc.page_texts)
-        # a page "without text" is one that gives no chunk, not only a blank page: many guides
-        # draw their text as images and only the page number survives the extraction
-        textless = len(doc.page_texts) - len({chunk.page for chunk in chunks})
+        textless = _textless_pages(doc, chunks)
         version = 1
         if entry is not None:
             previous = conn.execute(
@@ -124,13 +140,7 @@ def store_document(
                 textless,
             ),
         ).fetchone()
-        # COPY streams all rows in one round trip: thousands of chunks load in about a second
-        with (
-            conn.cursor() as cur,
-            cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
-        ):
-            for position, chunk in enumerate(chunks):
-                copy.write_row((row[0], chunk.page, position, chunk.text))
+        _copy_chunks(conn, row[0], chunks)
         if doc.pages:
             with (
                 conn.cursor() as cur,
@@ -143,6 +153,37 @@ def store_document(
                     copy.write_row(
                         (row[0], p.number, p.route, p.letters, p.text_masks, p.images, p.quality)
                     )
+    return len(chunks)
+
+
+def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDocument) -> int:
+    """Replace a loaded document's chunks and page routes with a new extraction of the same file.
+
+    Used when the extraction itself changes (a garbled text layer now detected, accents mended).
+    OCR text already stored on a page is kept: a page newly routed to OCR has none yet and is
+    picked up by the next OCR run. Returns the number of chunks.
+    """
+    chunks = pages_to_chunks(doc.filename, doc.page_texts)
+    with conn.transaction():
+        conn.execute(
+            "DELETE FROM chunks WHERE document_id = %s AND extraction = 'text_layer'",
+            (document_id,),
+        )
+        start = conn.execute(
+            "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
+            (document_id,),
+        ).fetchone()[0]
+        _copy_chunks(conn, document_id, chunks, start)
+        for p in doc.pages:
+            conn.execute(
+                "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"
+                " quality = %s WHERE document_id = %s AND page = %s",
+                (p.route, p.letters, p.text_masks, p.images, p.quality, document_id, p.number),
+            )
+        conn.execute(
+            "UPDATE documents SET content_sha256 = %s, textless_page_count = %s WHERE id = %s",
+            (doc.content_sha256, _textless_pages(doc, chunks), document_id),
+        )
     return len(chunks)
 
 
@@ -174,6 +215,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--manifest", type=Path, default=MANIFEST, help="official sources (family, title, URL)"
     )
+    parser.add_argument(
+        "--reextract",
+        action="store_true",
+        help="extract the PDFs already loaded again (after a change to the extraction)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -195,7 +241,14 @@ def main(argv: list[str] | None = None) -> None:
             # check the fingerprint before parsing: a rerun skips loaded files without the
             # extraction cost
             if is_loaded(conn, sha):
-                log.info("%s: already loaded, skipped", pdf.name)
+                if not args.reextract:
+                    log.info("%s: already loaded, skipped", pdf.name)
+                    continue
+                (document_id,) = conn.execute(
+                    "SELECT id FROM documents WHERE sha256 = %s", (sha,)
+                ).fetchone()
+                count = reextract_document(conn, document_id, read_source(pdf, data))
+                log.info("%s: extracted again, %d chunks", pdf.name, count)
                 continue
             count = store_document(conn, read_source(pdf, data), official.get(sha))
             if count is None:

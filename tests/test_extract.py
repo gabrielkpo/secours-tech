@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from secours_tech.extract import extract_pages, route, text_quality
+from secours_tech.extract import (
+    control_chars,
+    extract_pages,
+    french_share,
+    route,
+    text_quality,
+    word_overlap,
+)
 
 SENTENCE = "Couper l'alimentation électrique avant toute intervention sur le transformateur."
 
@@ -43,3 +50,59 @@ def test_relative_path_starting_with_a_dash_is_read_as_a_file(make_pdf, monkeypa
     pdf = make_pdf([SENTENCE], "-q.pdf")
     monkeypatch.chdir(pdf.parent)
     assert extract_pages(Path("-q.pdf"))[0].route == "text_layer"
+
+
+FRENCH = (
+    "Le chef d'agrès fait couper le courant avant toute action sur le transformateur et "
+    "fait établir une lance en jet diffusé pour protéger les intervenants de la chaleur."
+)
+GARBLED = "EFGHIJKLJHMNFGLMIM LOPIJGOJQRFGSFG TFRUSFTMVMSFGGWKOX " * 8
+
+
+def test_french_text_has_function_words_and_garbage_has_none():
+    assert french_share(FRENCH) > 0.2
+    assert french_share(GARBLED) == 0.0
+    assert french_share("Le chef d'agrès") is None  # a title: too few words to judge
+
+
+def test_word_overlap_ignores_reading_order():
+    assert word_overlap(FRENCH, " ".join(reversed(FRENCH.split()))) == 1.0
+    assert word_overlap("abcdef ghijkl mnopqr", FRENCH) == 0.0
+
+
+def test_split_accents_are_read_whole_and_composed(make_pdf, monkeypatch):
+    from secours_tech import extract
+
+    split = "des poussie\u0300 res fines peuvent e\u0302 tre e\u0301 vite\u0301 es"
+    whole = "des poussie\u0300res fines peuvent e\u0302tre e\u0301vite\u0301es"
+    calls = []
+
+    def fake(path, *options):
+        calls.append(options)
+        return [whole] if options else [split]
+
+    monkeypatch.setattr(extract, "_pdftotext", fake)
+    assert extract._read_text(make_pdf([SENTENCE])) == ["des poussières fines peuvent être évitées"]
+    assert calls == [(), ("-raw",)]
+
+
+def test_control_characters_mark_a_font_without_tounicode():
+    assert control_chars('\x15\x16\x17\x18\x19\x1a\x1b ! "#$') == 7
+    assert control_chars(FRENCH + "\n\t\f") == 0
+
+
+def test_accent_over_a_dotless_i_is_composed(make_pdf, monkeypatch):
+    from secours_tech import extract
+
+    monkeypatch.setattr(
+        extract, "_pdftotext", lambda path, *options: ["la cha\u0131\u0302ne du ma\u0131\u0308s"]
+    )
+    assert extract._read_text(make_pdf([SENTENCE])) == ["la chaîne du maïs"]
+
+
+def test_a_suspect_page_fails_loudly_without_ocr(tmp_path, monkeypatch):
+    from secours_tech import extract, ocr
+
+    monkeypatch.setattr(ocr, "MODEL_DIR", tmp_path)  # no model there
+    with pytest.raises(RuntimeError, match="needs OCR"):
+        extract._is_garbled(tmp_path / "x.pdf", 1, "fgh kla mpo trs vbn qws " * 5)
