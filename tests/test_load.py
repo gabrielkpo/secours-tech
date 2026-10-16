@@ -196,3 +196,12 @@ def test_ocr_bench_reads_ocr_text_without_its_running_footer(conn):
     for page, body in bodies.items():
         conn.execute("UPDATE pages SET ocr_text = %s WHERE page = %s", (f"{body}\n{footer}", page))
     assert ocr_pages(conn, "GTO-test.pdf") == bodies
+
+
+def test_ocr_sample_can_exclude_pages_already_transcribed(conn):
+    from secours_tech.ocr_bench import sample
+
+    pages = tuple(Page(i, "", "ocr", 120, 25, 26, 1.0) for i in range(1, 5))
+    store_document(conn, SourceDocument("GTO-test.pdf", "a" * 64, [""] * 4, pages))
+    drawn = sample(conn, per_guide=2, seed=1, exclude=frozenset({("GTO-test", 1), ("GTO-test", 2)}))
+    assert drawn == {"GTO-test.pdf": [3, 4]}
