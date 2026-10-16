@@ -16,3 +16,5 @@ __pycache__/
 data/tessdata/
 # hand transcriptions of OCR sample pages: doctrine text, kept out of the public repository
 data/ocr-reference/
+# evaluation drafts: questions with verbatim doctrine excerpts, kept out until the set is frozen
+data/eval-draft/
