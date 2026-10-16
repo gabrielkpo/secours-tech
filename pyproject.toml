@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "RAG assistant over official French firefighter doctrine (GDO, GTO, SSUAP, PSE), with cited sources."
 requires-python = ">=3.11"
 dependencies = [
+    "pikepdf==10.16.0",
     "psycopg[binary]>=3.2",
 ]
 

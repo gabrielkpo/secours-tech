@@ -46,10 +46,14 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked
   or differs from the manifest. A person downloads the PDFs in a browser and `collect register`
   files them and updates the manifest.
-- **OCR is stored, then gated.** `python -m secours_tech.ocr` renders each page routed to `ocr`
-  at 300 dpi (`pdftoppm`) and reads it with Tesseract 5 (LSTM) and the French `tessdata_best`
-  model, pinned to one commit and checked by SHA-256. Text and mean word confidence go on the
-  page row; nothing is indexed yet. A guide's OCR text becomes chunks only if a hand-transcribed
+- **OCR is stored, then gated.** `python -m secours_tech.ocr` copies each page routed to `ocr`
+  without its pictures (`pikepdf`: every image that is not a few-pixel text mask is removed, so
+  photos, drawings and grey boxes neither hide text nor read as gibberish), renders it at
+  600 dpi (`pdftoppm`) and reads it with Tesseract 5 (LSTM, Sauvola binarisation) and the French
+  `tessdata_best` model, pinned to one commit and checked by SHA-256. These settings were chosen
+  on the first hand-checked sample: guides passing went from 1 to 5 of 12, then 4 of 12 on the
+  validation sample. Text, mean word confidence and the engine with its settings go on the page
+  row; a page read with other settings is read again. Nothing is indexed yet. A guide's OCR text becomes chunks only if a hand-transcribed
   sample of its pages passes `python -m secours_tech.ocr_bench score`: every number read exactly
   (none missing, none added) and a character error rate of at most 1 %. Otherwise the guide
   stays uncovered. Only pages with text drawn as images are sampled and can be indexed; image

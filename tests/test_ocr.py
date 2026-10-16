@@ -97,3 +97,37 @@ def test_transcriptions_skip_files_that_are_not_a_page(tmp_path: Path):
     for name in ("p12.txt", "img-p12.txt", "photo-notes.txt", "p3.png"):
         (guide / name).write_text("x")
     assert transcriptions(tmp_path) == [(guide / "p12.txt", "GTO-test", 12)]
+
+
+def test_text_only_copy_keeps_text_masks_and_drops_pictures(tmp_path: Path):
+    import pikepdf
+
+    from secours_tech.ocr import text_only_copy
+
+    pdf = pikepdf.new()
+    mask = pdf.make_stream(
+        b"\xff", Width=8, Height=1, BitsPerComponent=1, ColorSpace=pikepdf.Name.DeviceGray
+    )
+    line = pdf.make_stream(b"\x00" * 12, Type=pikepdf.Name.XObject, Subtype=pikepdf.Name.Image,
+                           Width=2, Height=2, BitsPerComponent=8, ColorSpace=pikepdf.Name.DeviceRGB,
+                           SMask=mask)  # fmt: skip
+    photo = pdf.make_stream(b"\x80" * 300, Type=pikepdf.Name.XObject, Subtype=pikepdf.Name.Image,
+                            Width=10, Height=10, BitsPerComponent=8,
+                            ColorSpace=pikepdf.Name.DeviceRGB)  # fmt: skip
+    page = pdf.add_blank_page(page_size=(200, 200))
+    page.obj.Resources = pikepdf.Dictionary(XObject=pikepdf.Dictionary(Line=line, Photo=photo))
+    page.obj.Contents = pdf.make_stream(
+        b"q 100 0 0 10 0 0 cm /Line Do Q q 50 0 0 50 0 50 cm /Photo Do Q"
+    )
+    source = tmp_path / "in.pdf"
+    pdf.save(source)
+
+    target = tmp_path / "out.pdf"
+    text_only_copy(source, 1, target)
+    with pikepdf.open(target) as copy:
+        drawn = [
+            str(ops[0])
+            for ops, op in pikepdf.parse_content_stream(copy.pages[0])
+            if str(op) == "Do"
+        ]
+    assert drawn == ["/Line"]
