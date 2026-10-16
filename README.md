@@ -123,7 +123,7 @@ out-of-scope question answered, individual medical advice) must stay at 0. Basel
 
 ## Run it
 
-Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract, and the official PDFs in
+Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract (local checker), a Mistral API key in `.env` (OCR), and the official PDFs in
 `data/raw/` (not distributed here; see [Data and privacy](#data-and-privacy)).
 
 ```bash
@@ -131,7 +131,7 @@ uv sync --locked
 createdb secours_tech                      # Postgres 17 with pgvector and unaccent
 export DATABASE_URL=postgresql:///secours_tech
 uv run python -m secours_tech.load data/raw          # text layer, page routes, sections
-uv run python -m secours_tech.ocr data/raw           # OCR of the pages routed to OCR (~45 min)
+uv run python -m secours_tech.ocr data/raw           # Mistral OCR of the pages routed to OCR (needs MISTRAL_API_KEY)
 uv run python -m secours_tech.ocr_bench index        # index the OCR of the guides that pass
 uv run pytest                              # set TEST_DATABASE_URL to run the database tests
 ```
@@ -175,7 +175,7 @@ milestones need (server side only).
 - **Pages waiting for OCR.** Of the 2,993 pages of the 28 official guides, 1,192 are routed to
   OCR and 184 are blank. In 12 guides each line of text is drawn as an image; in 2 more
   (structure fires, ULM) the text layer is garbled by a font without a ToUnicode table; the
-  rest are image pages. Their OCR text (Tesseract, French model) is stored but indexed guide by guide, only
+  rest are image pages. Their OCR text (Mistral OCR) is stored but indexed guide by guide, only
   once a hand-checked sample reads every number right and 99 % of the characters.
 - **No answers yet.** Retrieval, generation and the citation check are designed but not built,
   so there are no results to report.

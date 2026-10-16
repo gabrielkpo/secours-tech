@@ -1,20 +1,29 @@
-"""OCR of the pages routed to `ocr`, with Tesseract and its French model.
+"""OCR of the pages routed to `ocr`: Mistral OCR for the text that gets indexed, Tesseract as
+a local checker.
 
-Each page is copied with its pictures removed: the ministry's Word exports draw every line of
+Mistral OCR (`mistral-ocr-4-1`, pinned) reads the text that may be indexed (decision D5 revised on
+16/10/2026: on the hand-checked samples 10 of 14 guides pass with it, 2 with Tesseract). Its
+Markdown is turned into plain text. Tesseract stays for one job only, offline and without a key:
+reading a page whose text layer looks garbled, so the loader can confirm it (`extract.py`); its
+text is never indexed.
+
+Both read the same input. Each page is copied with its pictures removed: the ministry's Word exports draw every line of
 text as a tiny solid image carrying a 1-bit mask, while photos, drawings and box backgrounds are
 ordinary images. Only the text is left (grey boxes no longer hide their text, drawings no longer
 read as gibberish). The copy is rendered at 600 dpi with `pdftoppm` and read by Tesseract (LSTM
 engine, Sauvola binarisation, `fra` model from tessdata_best pinned to one commit and checked by
-SHA-256). Text and mean word confidence are stored on the page row; a page read with other
-settings is read again. Settings chosen on a hand-checked sample and validated on another one
+SHA-256). Text (and Tesseract's mean word confidence) are stored on the page row with the engine
+and its settings; a page read with another engine or other settings is read again. Settings chosen on a hand-checked sample and validated on another one
 (`secours_tech.ocr_bench`). OCR text is not indexed here: a guide's OCR text is only
 used once its sample passes the reliability check (`secours_tech.ocr_bench`).
 """
 
 import argparse
+import base64
 import hashlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +35,7 @@ from pathlib import Path
 import pikepdf
 
 from secours_tech.db import connect, migrate
+from secours_tech.mistral import MistralError, api_key, post
 
 log = logging.getLogger(__name__)
 
@@ -37,12 +47,14 @@ MODEL_URL = (
 MODEL_SHA256 = "907743d98915c91a3906dfbf6e48b97598346698fe53aaa797e1a064ffcac913"
 DPI = 600
 SETTINGS = "text-only 600dpi sauvola"  # stored with the text: a change of settings re-reads pages
+MISTRAL_MODEL = "mistral-ocr-4-1"  # pinned: "mistral-ocr-latest" would move under our feet
+MISTRAL_ENGINE = f"{MISTRAL_MODEL} text-only"
 
 
 @dataclass(frozen=True)
 class OcrResult:
     text: str
-    confidence: float  # mean Tesseract word confidence, 0 to 100
+    confidence: float | None  # mean Tesseract word confidence, 0 to 100; None for Mistral
 
 
 def fetch_model(directory: Path = MODEL_DIR) -> Path:
@@ -171,6 +183,57 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
     return text_from_tsv(tsv)
 
 
+_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉", "01234567890123456789")
+_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_TAG = re.compile(r"<sup>(.*?)</sup>|<sub>(.*?)</sub>")
+_TABLE_RULE = re.compile(r"^[\s|:-]+$")
+_HEADING = re.compile(r"^\s*#+\s*")
+_EMPHASIS = re.compile(r"\*\*|__|(?<!\w)\*(?=\S)|(?<=\S)\*(?!\w)")
+_MATH = re.compile(r"\$([^$]*)\$")
+_LATEX = re.compile(r"\\(?:mathrm|text|mathbf|textbf)\s*|[{}^_]")
+
+
+def markdown_to_text(markdown: str) -> str:
+    """Mistral OCR's Markdown as the plain text a reader sees on the page.
+
+    Pictures are dropped (they hold no text here), table pipes and rules become spaces, heading
+    marks and emphasis go, and superscripts ("accident³⁰", "m³", "$H_{2}$") become plain digits
+    written inline, as in the PDF text layer.
+    """
+    text = _IMAGE.sub("", markdown.translate(_SUPERSCRIPTS))
+    text = _TAG.sub(lambda m: m.group(1) or m.group(2), text)
+    lines = []
+    for line in text.splitlines():
+        if line.strip() and _TABLE_RULE.fullmatch(line):
+            continue
+        line = _EMPHASIS.sub("", _HEADING.sub("", line).replace("|", " "))
+        line = _MATH.sub(lambda m: _LATEX.sub("", m.group(1)).replace(r"\%", "%"), line)
+        lines.append(" ".join(line.split()))
+    return "\n".join(lines).strip()
+
+
+def mistral_ocr_page(pdf: Path, page: int, key: str) -> OcrResult:
+    """Read one page with Mistral OCR, sent as a one-page PDF without its pictures."""
+    with tempfile.TemporaryDirectory() as tmp:
+        single = Path(tmp) / "page.pdf"
+        text_only_copy(pdf.resolve(), page, single)
+        data = base64.b64encode(single.read_bytes()).decode()
+    answer = post(
+        "ocr",
+        {
+            "model": MISTRAL_MODEL,
+            "document": {
+                "type": "document_url",
+                "document_url": f"data:application/pdf;base64,{data}",
+            },
+            "include_image_base64": False,
+        },
+        key,
+    )
+    markdown = "\n".join(p.get("markdown", "") for p in answer.get("pages", []))
+    return OcrResult(markdown_to_text(markdown), None)
+
+
 def pdf_paths_by_sha(corpus: Path) -> dict[str, Path]:
     return {hashlib.sha256(p.read_bytes()).hexdigest(): p for p in sorted(corpus.rglob("*.pdf"))}
 
@@ -180,15 +243,30 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "corpus", type=Path, help="folder with the loaded PDFs (searched recursively)"
     )
-    parser.add_argument("--workers", type=int, default=3, help="pages read in parallel")
+    parser.add_argument("--workers", type=int, default=2, help="pages read in parallel")
+    parser.add_argument(
+        "--engine",
+        choices=("mistral", "tesseract"),
+        default="mistral",
+        help="mistral for the indexed text (D5); tesseract to compare, offline",
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    for tool in ("pdftoppm", "tesseract"):
-        if shutil.which(tool) is None:
-            raise SystemExit(f"{tool} not found: install poppler and tesseract")
-    fetch_model()
-    engine = engine_version()
+    if args.engine == "mistral":
+        key = api_key()
+        engine = MISTRAL_ENGINE
+
+        def read(pdf: Path, page: int) -> OcrResult:
+            return mistral_ocr_page(pdf, page, key)
+
+    else:
+        for tool in ("pdftoppm", "tesseract"):
+            if shutil.which(tool) is None:
+                raise SystemExit(f"{tool} not found: install poppler and tesseract")
+        fetch_model()
+        engine = engine_version()
+        read = ocr_page
     paths = pdf_paths_by_sha(args.corpus)
 
     with connect() as conn:
@@ -217,10 +295,11 @@ def main(argv: list[str] | None = None) -> None:
         def work(job):
             doc, page, pdf = job
             try:
-                return doc, page, ocr_page(pdf, page)
-            except subprocess.CalledProcessError as error:
-                # one unreadable page must not stop the run; it stays NULL and is retried next time
-                log.warning("%s page %d: %s failed, skipped", pdf.name, page, error.cmd[0])
+                return doc, page, read(pdf, page)
+            except (subprocess.CalledProcessError, MistralError) as error:
+                # one unreadable page must not stop the run: it keeps its previous text and engine,
+                # so the next run reads it again
+                log.warning("%s page %d: skipped (%s)", pdf.name, page, error)
                 return doc, page, None
 
         with ThreadPoolExecutor(max_workers=args.workers) as pool:

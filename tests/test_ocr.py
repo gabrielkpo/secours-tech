@@ -131,3 +131,46 @@ def test_text_only_copy_keeps_text_masks_and_drops_pictures(tmp_path: Path):
             if str(op) == "Do"
         ]
     assert drawn == ["/Line"]
+
+
+def test_mistral_markdown_reads_as_the_page_text():
+    from secours_tech.ocr import markdown_to_text
+
+    markdown = (
+        "# 2.4. Le ravitaillement\n\n"
+        "Un **accident**³⁰ en opération, 0,5 m³ d'eau et $\\mathrm{H}_{2}$.\n\n"
+        "![img-0.jpeg](img-0.jpeg)\n\n"
+        "| Classe | Largeur |\n| :--: | :--: |\n| 1 | 2 m |\n"
+    )
+    assert markdown_to_text(markdown).splitlines() == [
+        "2.4. Le ravitaillement",
+        "",
+        "Un accident30 en opération, 0,5 m3 d'eau et H2.",
+        "",
+        "",
+        "",
+        "Classe Largeur",
+        "1 2 m",
+    ]
+
+
+def test_mistral_page_is_sent_without_its_pictures(tmp_path, monkeypatch, make_pdf):
+    from secours_tech import ocr
+
+    sent = {}
+
+    def fake_post(path, payload, key):
+        sent.update(path=path, model=payload["model"], key=key)
+        return {"pages": [{"markdown": "Couper le **gaz**."}]}
+
+    copies = []
+    monkeypatch.setattr(ocr, "post", fake_post)
+    monkeypatch.setattr(
+        ocr,
+        "text_only_copy",
+        lambda pdf, page, target: (copies.append(page), target.write_bytes(b"%PDF")),
+    )
+    result = ocr.mistral_ocr_page(make_pdf(["Couper le gaz."]), 1, "k")
+    assert result == ocr.OcrResult("Couper le gaz.", None)
+    assert sent == {"path": "ocr", "model": "mistral-ocr-4-1", "key": "k"}
+    assert copies == [1]
