@@ -1,6 +1,6 @@
 [project]
 name = "secours-tech"
-version = "0.1.0"
+version = "0.2.0"
 description = "RAG assistant over official French firefighter doctrine (GDO, GTO, SSUAP, PSE), with cited sources."
 requires-python = ">=3.11"
 dependencies = [
