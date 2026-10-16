@@ -172,14 +172,15 @@ milestones need (server side only).
 
 ## Limitations / next
 
-- **Three OCR guides stay uncovered.** Of the 2,993 pages of the 28 official guides, 1,192 are
+- **Four OCR guides stay uncovered.** Of the 2,993 pages of the 28 official guides, 1,192 are
   routed to OCR and 184 are blank. In 12 guides each line of text is drawn as an image; in 2
   more (structure fires, ULM) the text layer is garbled by a font without a ToUnicode table; the
   rest are image pages. A guide's OCR text (Mistral OCR) is indexed only once a hand-checked
   sample reads every number right and 99 % of the characters: 11 of the 14 OCR guides pass
   (2,363 chunks, `corpus/ocr-validation.toml`). Structure fires and ULM each have one number
   misread on the sample, and the dog teams guide has a 2.8 % character error rate; they stay
-  out of the index.
+  out of the index, and so do the 5 OCR pages of the PSE technical references, which have no
+  hand-checked sample yet.
 - **No answers yet.** Retrieval, generation and the citation check are designed but not built,
   so there are no results to report.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
