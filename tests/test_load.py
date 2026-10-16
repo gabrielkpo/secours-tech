@@ -6,6 +6,7 @@ import pytest
 from secours_tech.collect import Entry
 from secours_tech.db import migrate
 from secours_tech.extract import Page
+from secours_tech.ingest import Chunk
 from secours_tech.load import (
     SourceDocument,
     family_of,
@@ -260,3 +261,23 @@ def test_only_guides_that_pass_get_ocr_chunks_and_indexing_is_idempotent(conn, t
     text = record.read_text()
     assert 'file = "GTO-ko.pdf"' in text and "passed = false" in text
     assert "chunks_indexed = 2" in text and "Ventiler" not in text  # scores only, no doctrine
+
+
+def test_positions_follow_page_order_after_ocr_chunks_are_added(conn):
+    from secours_tech.load import copy_chunks, renumber_chunks
+
+    store_document(conn, DOC)  # text chunks on pages 1 and 3
+    (doc_id,) = conn.execute("SELECT id FROM documents").fetchone()
+    copy_chunks(conn, doc_id, [Chunk("x", 2, "Texte lu par OCR.")], start=10, extraction="ocr")
+    renumber_chunks(conn, doc_id)
+    rows = conn.execute("SELECT position, page FROM chunks ORDER BY position").fetchall()
+    assert rows == [(0, 1), (1, 2), (2, 3)]
+
+
+def test_a_guide_read_with_mixed_settings_is_not_indexed(conn):
+    from secours_tech.ocr_bench import GuideScore, PageScore, index_guides
+
+    _ocr_guide(conn, "GTO-ok.pdf", "a" * 64, ["Ventiler le local.", "Couper le gaz."])
+    conn.execute("UPDATE pages SET ocr_engine = 'other' WHERE page = 2")
+    guides = {"GTO-ok.pdf": GuideScore("GTO-ok.pdf", [PageScore(1, 0, 100, [], [])])}
+    assert index_guides(conn, guides) == {}

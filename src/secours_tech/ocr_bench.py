@@ -24,7 +24,7 @@ from pathlib import Path
 from secours_tech.db import connect
 from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
 from secours_tech.ingest import Chunk, chunk_text, strip_repeated_lines
-from secours_tech.load import copy_chunks
+from secours_tech.load import copy_chunks, renumber_chunks
 
 REFERENCES = Path("data/ocr-reference")
 SAMPLES = (REFERENCES, REFERENCES / "validation")  # tuning sample, then held-out validation
@@ -193,7 +193,9 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
     """Make the OCR chunks of every current guide match the reliability check.
 
     A guide that passes gets the OCR text of its indexable pages as chunks (`extraction = 'ocr'`);
-    any other guide, failed or never sampled, keeps none. Returns the chunks written per guide.
+    any other guide, failed or never sampled, keeps none. A guide whose pages were not all read
+    with one engine and one set of settings is not indexed: its sample would not vouch for the
+    rest. Returns the chunks written per guide.
     """
     written = {}
     documents = conn.execute(
@@ -207,6 +209,14 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             )
             guide = guides.get(filename)
             if guide is None or not guide.passed:
+                continue
+            (engines,) = conn.execute(
+                "SELECT count(DISTINCT ocr_engine) + count(*) FILTER (WHERE ocr_engine IS NULL)"
+                f" FROM pages p WHERE p.document_id = %s AND {INDEXABLE}",
+                (document_id,),
+            ).fetchone()
+            if engines != 1:
+                print(f"{filename}: pages read with several OCR settings, not indexed")
                 continue
             texts = ocr_pages(conn, filename)
             pages = [
@@ -227,6 +237,7 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
                 (document_id,),
             ).fetchone()
             copy_chunks(conn, document_id, chunks, start, extraction="ocr")
+            renumber_chunks(conn, document_id)
             written[filename] = len(chunks)
     return written
 
@@ -312,8 +323,9 @@ def main(argv: list[str] | None = None) -> None:
             written = index_guides(conn, guides)
             engines = dict(
                 conn.execute(
-                    "SELECT d.filename, max(p.ocr_engine) FROM pages p JOIN documents d"
-                    " ON d.id = p.document_id WHERE d.retired_at IS NULL GROUP BY d.filename"
+                    "SELECT d.filename, string_agg(DISTINCT p.ocr_engine, ' | ') FROM pages p"
+                    " JOIN documents d ON d.id = p.document_id"
+                    " WHERE d.retired_at IS NULL GROUP BY d.filename"
                 ).fetchall()
             )
             write_record(args.record, guides, written, engines)

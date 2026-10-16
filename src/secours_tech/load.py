@@ -96,6 +96,24 @@ def copy_chunks(
             copy.write_row((document_id, chunk.page, position, chunk.text, extraction))
 
 
+def renumber_chunks(conn: psycopg.Connection, document_id: int) -> None:
+    """Make `position` follow the reading order again (page, then order on the page) after chunks
+    of another extraction were added. Two steps, so the unique (document, position) never clashes.
+    """
+    conn.execute(
+        "UPDATE chunks SET position = position + 1000000 WHERE document_id = %s", (document_id,)
+    )
+    conn.execute(
+        """
+        UPDATE chunks c SET position = r.n FROM (
+            SELECT id, row_number() OVER (ORDER BY page, position) - 1 AS n
+            FROM chunks WHERE document_id = %s
+        ) r WHERE c.id = r.id
+        """,
+        (document_id,),
+    )
+
+
 def store_document(
     conn: psycopg.Connection, doc: SourceDocument, entry: Entry | None = None
 ) -> int | None:
@@ -178,6 +196,7 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             (document_id,),
         ).fetchone()[0]
         copy_chunks(conn, document_id, chunks, start)
+        renumber_chunks(conn, document_id)
         for p in doc.pages:
             conn.execute(
                 "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"
