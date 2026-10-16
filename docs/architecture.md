@@ -51,6 +51,11 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   pages (photos, diagrams) are OCRed for measurement but stay uncovered. The score compares
   text, not layout: the running footer is removed from the OCR text the way chunking removes
   it (lines repeated on half the pages, compared by their words so logo noise such as "@&"
-  does not hide them), and list bullets, read by the OCR as a lone "e", "o" or dash, are
-  ignored on both sides. Transcriptions live outside Git (`data/ocr-reference/`): they are
-  doctrine text.
+  does not hide them). On both sides, list bullets (read by the OCR as a lone "e", "o" or
+  dash), French typographic spaces, dash and quote styles, table-of-contents dot leaders and
+  words cut at a line end are ignored. In v0 only text drawn as text counts: labels inside
+  pictures (diagrams, sketches, posters) are neither scored nor indexed; they are transcribed
+  apart (`img-p<N>.txt`) and `--with-image-labels` scores them for information. Two samples:
+  one to tune the engine, and a validation sample drawn with another seed that excludes it
+  (`sample --exclude`), so a setting is judged on pages it was not tuned on. Transcriptions
+  live outside Git (`data/ocr-reference/`): they are doctrine text.

@@ -23,7 +23,7 @@ def test_tsv_is_rebuilt_line_by_line_with_mean_confidence():
 
 
 def test_normalize_ignores_layout_and_quote_styles():
-    assert normalize("l’intervention\n  « COS »") == 'l\'intervention " COS "'
+    assert normalize("l’intervention\n  « COS »") == 'l\'intervention"COS"'
 
 
 def test_edit_distance():
@@ -73,3 +73,27 @@ def test_normalize_ignores_list_bullets_read_by_the_ocr():
     ocr = "e ne pas dégrader la protection ;\no couper le gaz ;\n- baliser."
     assert normalize(ocr) == normalize("ne pas dégrader la protection ;\ncouper le gaz ;\nbaliser.")
     assert normalize("à proposer un dispositif") == "à proposer un dispositif"
+
+
+def test_normalize_ignores_french_typographic_spaces_dashes_and_ellipsis():
+    reference = "« cône d’effluves » ; voir annexe A – page 3…"
+    ocr = '"cône d\'effluves"; voir annexe A - page 3...'
+    assert normalize(reference) == normalize(ocr)
+
+
+def test_normalize_drops_table_of_contents_leaders_and_joins_cut_words():
+    assert normalize("5.1. Les éléments à recueillir.......... 37") == normalize(
+        "5.1. Les éléments à recueillir 37"
+    )
+    assert normalize("les sapeurs-\npompiers") == "les sapeurs-pompiers"
+    assert normalize("✓ la police nationale") == "la police nationale"
+
+
+def test_transcriptions_skip_files_that_are_not_a_page(tmp_path: Path):
+    from secours_tech.ocr_bench import transcriptions
+
+    guide = tmp_path / "GTO-test"
+    guide.mkdir()
+    for name in ("p12.txt", "img-p12.txt", "photo-notes.txt", "p3.png"):
+        (guide / name).write_text("x")
+    assert transcriptions(tmp_path) == [(guide / "p12.txt", "GTO-test", 12)]

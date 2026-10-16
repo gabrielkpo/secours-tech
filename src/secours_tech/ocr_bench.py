@@ -28,18 +28,28 @@ from secours_tech.ingest import strip_repeated_lines
 REFERENCES = Path("data/ocr-reference")
 MAX_CER = 0.01
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
-_BULLET = re.compile(r"^\s*[•●▪■◦○·*°eo\-–—]\s+")
-_QUOTES = str.maketrans({"’": "'", "‘": "'", "«": '"', "»": '"', " ": " ", " ": " "})
+_BULLET = re.compile(r"^\s*[•●▪■◦○·*°✓✔eo\-–—]\s+")
+_QUOTES = str.maketrans(
+    {"’": "'", "‘": "'", "«": '"', "»": '"', "\u00a0": " ", "\u202f": " ", "–": "-", "—": "-"}
+)
+_LINE_BREAK_HYPHEN = re.compile(r"(\w)-\n(?=\w)")
+# French typography puts a (thin) space before ; : ! ? and inside quotes; engines keep or drop it
+_TYPO_SPACE = re.compile(r'\s+(?=[;:!?])|\s*"\s*')
+_LEADER = re.compile(r"\.{4,}")  # table-of-contents dot leaders, whatever their length
 
 
 def normalize(text: str) -> str:
-    """Compare text, not layout: same quotes, no list bullets, single spaces, no line breaks.
+    """Compare text, not layout.
 
-    Transcriptions leave bullets out; the OCR reads them as a lone "e", "o", "*" or dash at the
-    start of the line, which would count as errors on every list item.
+    Same quotes and dashes, no list bullets, no space before ; : ! ? or around quotes, "…" as
+    "...", no table-of-contents dot leaders, words cut at a line end joined back, single spaces.
+    Transcriptions leave bullets and leaders out; the OCR reads a bullet as a lone "e", "o", "*"
+    or dash at the start of the line, which would count as errors on every list item.
     """
-    lines = (_BULLET.sub("", line) for line in text.translate(_QUOTES).splitlines())
-    return " ".join(" ".join(lines).split())
+    text = _LINE_BREAK_HYPHEN.sub(r"\1-", text.translate(_QUOTES))
+    text = " ".join(_BULLET.sub("", line) for line in text.splitlines())
+    text = _TYPO_SPACE.sub(lambda m: '"' if '"' in m.group() else "", text.replace("…", "..."))
+    return " ".join(_LEADER.sub(" ", text).split())
 
 
 def edit_distance(a: str, b: str) -> int:
@@ -96,8 +106,27 @@ class GuideScore:
         return bool(self.pages) and self.numbers_exact and self.cer <= MAX_CER
 
 
-def sample(conn, per_guide: int, seed: int) -> dict[str, list[int]]:
-    """Pages to transcribe: a seeded random draw among each guide's OCR pages with text masks."""
+_TRANSCRIPTION = re.compile(r"p(\d+)\.txt")
+
+
+def transcriptions(folder: Path) -> list[tuple[Path, str, int]]:
+    """Hand transcriptions in a sample folder: (file, pdf stem, page), from `<stem>/p<page>.txt`."""
+    found = []
+    for path in sorted(folder.glob("*/p*.txt")):
+        match = _TRANSCRIPTION.fullmatch(path.name)
+        if match:
+            found.append((path, path.parent.name, int(match.group(1))))
+    return found
+
+
+def sample(
+    conn, per_guide: int, seed: int, exclude: frozenset[tuple[str, int]] = frozenset()
+) -> dict[str, list[int]]:
+    """Pages to transcribe: a seeded random draw among each guide's OCR pages with text masks.
+
+    Pages in `exclude` (pdf stem, page), already transcribed for an earlier sample, are not drawn
+    again: a validation sample stays apart from the one the engine was tuned on.
+    """
     rows = conn.execute(
         "SELECT d.filename, p.page FROM pages p JOIN documents d ON d.id = p.document_id"
         " WHERE p.route = 'ocr' AND p.text_masks >= %s AND d.retired_at IS NULL"
@@ -106,7 +135,8 @@ def sample(conn, per_guide: int, seed: int) -> dict[str, list[int]]:
     ).fetchall()
     by_guide: dict[str, list[int]] = {}
     for filename, page in rows:
-        by_guide.setdefault(filename, []).append(page)
+        if (Path(filename).stem, page) not in exclude:
+            by_guide.setdefault(filename, []).append(page)
     rng = random.Random(seed)
     return {
         name: sorted(rng.sample(pages, min(per_guide, len(pages))))
@@ -140,13 +170,28 @@ def main(argv: list[str] | None = None) -> None:
     draw.add_argument("corpus", type=Path, help="folder with the loaded PDFs")
     draw.add_argument("--per-guide", type=int, default=2)
     draw.add_argument("--seed", type=int, default=15102026)
-    sub.add_parser("score", help="score the OCR text against the transcriptions")
+    draw.add_argument(
+        "--exclude",
+        type=Path,
+        action="append",
+        default=[],
+        help="folder of an earlier sample, whose transcribed pages are not drawn again (repeatable)",
+    )
+    score = sub.add_parser("score", help="score the OCR text against the transcriptions")
+    score.add_argument(
+        "--with-image-labels",
+        action="store_true",
+        help="also expect the labels drawn inside pictures (img-p<N>.txt); out of scope in v0",
+    )
     args = parser.parse_args(argv)
 
     with connect() as conn:
         if args.command == "sample":
             pdfs = {p.name: p for p in args.corpus.rglob("*.pdf")}
-            for filename, pages in sample(conn, args.per_guide, args.seed).items():
+            exclude = frozenset(
+                (stem, page) for folder in args.exclude for _, stem, page in transcriptions(folder)
+            )
+            for filename, pages in sample(conn, args.per_guide, args.seed, exclude).items():
                 folder = args.references / Path(filename).stem
                 folder.mkdir(parents=True, exist_ok=True)
                 for page in pages:
@@ -161,17 +206,20 @@ def main(argv: list[str] | None = None) -> None:
 
         guides: dict[str, GuideScore] = {}
         ocr_by_guide: dict[str, dict[int, str]] = {}
-        for reference in sorted(args.references.glob("*/p*.txt")):
-            page = int(reference.stem[1:])
-            filename = f"{reference.parent.name}.pdf"
+        for reference, stem, page in transcriptions(args.references):
+            filename = f"{stem}.pdf"
             if filename not in ocr_by_guide:
                 ocr_by_guide[filename] = ocr_pages(conn, filename)
             ocr = ocr_by_guide[filename].get(page)
             if ocr is None:
                 print(f"no OCR text yet for {reference}")
                 continue
+            text = reference.read_text(encoding="utf-8")
+            labels = reference.with_name(f"img-{reference.name}")
+            if args.with_image_labels and labels.exists():
+                text += "\n" + labels.read_text(encoding="utf-8")
             guide = guides.setdefault(filename, GuideScore(filename))
-            guide.pages.append(score_page(page, reference.read_text(encoding="utf-8"), ocr))
+            guide.pages.append(score_page(page, text, ocr))
 
     for guide in guides.values():
         verdict = "PASS" if guide.passed else "FAIL"
