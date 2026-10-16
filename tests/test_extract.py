@@ -89,3 +89,12 @@ def test_split_accents_are_read_whole_and_composed(make_pdf, monkeypatch):
 def test_control_characters_mark_a_font_without_tounicode():
     assert control_chars('\x15\x16\x17\x18\x19\x1a\x1b ! "#$') == 7
     assert control_chars(FRENCH + "\n\t\f") == 0
+
+
+def test_accent_over_a_dotless_i_is_composed(make_pdf, monkeypatch):
+    from secours_tech import extract
+
+    monkeypatch.setattr(
+        extract, "_pdftotext", lambda path, *options: ["la cha\u0131\u0302ne du ma\u0131\u0308s"]
+    )
+    assert extract._read_text(make_pdf([SENTENCE])) == ["la chaîne du maïs"]

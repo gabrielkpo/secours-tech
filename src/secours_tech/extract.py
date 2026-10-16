@@ -38,7 +38,10 @@ MAX_CONTROL_CHARS = 3  # control characters (\x14…) never occur in real text; 
 log = logging.getLogger(__name__)
 _WORD = re.compile(r"[a-zàâçéèêëîïôûùüÿœ]{2,}")
 _LONG_WORD = re.compile(r"[a-zàâçéèêëîïôûùüÿœ]{3,}")
+# an accent over a dotless i ("chaı̂ne") has no composed form: NFC leaves it apart
+_DOTLESS_I = str.maketrans({"ı": "i"})
 _SPLIT_ACCENT = re.compile(r"[\u0300-\u036f] (?=\w)")
+_COMBINING = re.compile(r"[\u0300-\u036f]")
 _FUNCTION_WORDS = frozenset(
     [
         "le",
@@ -173,7 +176,11 @@ def _read_text(path: Path) -> list[str]:
         if len(raw) == len(parts):
             parts = [r if s else t for t, r, s in zip(parts, raw, split, strict=True)]
             log.info("%s: %d page(s) read in raw order (split accents)", path.name, sum(split))
-    return [unicodedata.normalize("NFC", text) for text in parts]
+    # a mark NFC cannot compose is a stray doubled accent in the source ("é́"): it is dropped
+    return [
+        _COMBINING.sub("", unicodedata.normalize("NFC", text.translate(_DOTLESS_I)))
+        for text in parts
+    ]
 
 
 def control_chars(text: str) -> int:
