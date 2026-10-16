@@ -176,6 +176,9 @@ def _read_text(path: Path) -> list[str]:
         if len(raw) == len(parts):
             parts = [r if s else t for t, r, s in zip(parts, raw, split, strict=True)]
             log.info("%s: %d page(s) read in raw order (split accents)", path.name, sum(split))
+        else:
+            log.warning("%s: raw reading gives %d pages, not %d; split accents kept",
+                        path.name, len(raw), len(parts))  # fmt: skip
     # a mark NFC cannot compose is a stray doubled accent in the source ("é́"): it is dropped
     return [
         _COMBINING.sub("", unicodedata.normalize("NFC", text.translate(_DOTLESS_I)))
@@ -200,8 +203,12 @@ def _is_garbled(path: Path, number: int, text: str) -> bool:
     from secours_tech.ocr import MODEL_DIR, ocr_page  # OCR is needed only for suspect pages
 
     if shutil.which("tesseract") is None or not (MODEL_DIR / "fra.traineddata").exists():
-        log.warning("%s p%d: suspect text layer, OCR unavailable to check it", path.name, number)
-        return True  # never index a text layer that could not be checked
+        # failing beats guessing: the route of a page must not depend on the machine
+        raise RuntimeError(
+            f"{path.name} p{number}: a suspect text layer needs OCR to be checked; install"
+            " tesseract and fetch the model (python -c 'from secours_tech.ocr import"
+            " fetch_model; fetch_model()')"
+        )
     overlap = word_overlap(text, ocr_page(path, number).text)
     if overlap < MIN_OCR_OVERLAP:
         log.warning("%s p%d: garbled text layer (OCR finds %.0f%% of its words), sent to OCR",

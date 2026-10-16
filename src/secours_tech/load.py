@@ -12,7 +12,7 @@ import psycopg
 from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
 from secours_tech.extract import Page, extract_pages
-from secours_tech.ingest import pages_to_chunks
+from secours_tech.ingest import Chunk, pages_to_chunks
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +74,24 @@ def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
     )
 
 
+def _textless_pages(doc: SourceDocument, chunks: list[Chunk]) -> int:
+    # a page "without text" is one that gives no chunk, not only a blank page: many guides
+    # draw their text as images and only the page number survives the extraction
+    return len(doc.page_texts) - len({chunk.page for chunk in chunks})
+
+
+def _copy_chunks(
+    conn: psycopg.Connection, document_id: int, chunks: list[Chunk], start: int = 0
+) -> None:
+    # COPY streams all rows in one round trip: thousands of chunks load in about a second
+    with (
+        conn.cursor() as cur,
+        cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
+    ):
+        for position, chunk in enumerate(chunks, start=start):
+            copy.write_row((document_id, chunk.page, position, chunk.text))
+
+
 def store_document(
     conn: psycopg.Connection, doc: SourceDocument, entry: Entry | None = None
 ) -> int | None:
@@ -92,9 +110,7 @@ def store_document(
         if duplicate:
             return None
         chunks = pages_to_chunks(doc.filename, doc.page_texts)
-        # a page "without text" is one that gives no chunk, not only a blank page: many guides
-        # draw their text as images and only the page number survives the extraction
-        textless = len(doc.page_texts) - len({chunk.page for chunk in chunks})
+        textless = _textless_pages(doc, chunks)
         version = 1
         if entry is not None:
             previous = conn.execute(
@@ -124,13 +140,7 @@ def store_document(
                 textless,
             ),
         ).fetchone()
-        # COPY streams all rows in one round trip: thousands of chunks load in about a second
-        with (
-            conn.cursor() as cur,
-            cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
-        ):
-            for position, chunk in enumerate(chunks):
-                copy.write_row((row[0], chunk.page, position, chunk.text))
+        _copy_chunks(conn, row[0], chunks)
         if doc.pages:
             with (
                 conn.cursor() as cur,
@@ -163,12 +173,7 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
             (document_id,),
         ).fetchone()[0]
-        with (
-            conn.cursor() as cur,
-            cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
-        ):
-            for position, chunk in enumerate(chunks, start=start):
-                copy.write_row((document_id, chunk.page, position, chunk.text))
+        _copy_chunks(conn, document_id, chunks, start)
         for p in doc.pages:
             conn.execute(
                 "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"
@@ -177,11 +182,7 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             )
         conn.execute(
             "UPDATE documents SET content_sha256 = %s, textless_page_count = %s WHERE id = %s",
-            (
-                doc.content_sha256,
-                len(doc.page_texts) - len({chunk.page for chunk in chunks}),
-                document_id,
-            ),
+            (doc.content_sha256, _textless_pages(doc, chunks), document_id),
         )
     return len(chunks)
 

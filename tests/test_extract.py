@@ -98,3 +98,11 @@ def test_accent_over_a_dotless_i_is_composed(make_pdf, monkeypatch):
         extract, "_pdftotext", lambda path, *options: ["la cha\u0131\u0302ne du ma\u0131\u0308s"]
     )
     assert extract._read_text(make_pdf([SENTENCE])) == ["la chaîne du maïs"]
+
+
+def test_a_suspect_page_fails_loudly_without_ocr(tmp_path, monkeypatch):
+    from secours_tech import extract, ocr
+
+    monkeypatch.setattr(ocr, "MODEL_DIR", tmp_path)  # no model there
+    with pytest.raises(RuntimeError, match="needs OCR"):
+        extract._is_garbled(tmp_path / "x.pdf", 1, "fgh kla mpo trs vbn qws " * 5)
