@@ -24,7 +24,19 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   then the French stemmer), so it cannot drift from the chunk text and "electricite" finds
   "électricité". The French stemmer handles nouns and infinitives ("ventilation" finds
   "ventiler") but not every conjugated form ("ventilent"): semantic search covers that gap.
-  Queries use `websearch_to_tsquery`, which never fails on free text.
+  Queries use `websearch_to_tsquery`, which never fails on free text. The vector covers the
+  chunk's context ("guide › chapter › section") as well as its text.
+- **Sections come from the printed table of contents (D18).** The guides carry almost no PDF
+  bookmarks but print a table of contents. `structure.py` reads its lines from the
+  layout-preserving text (`pdftotext -layout`), gives each a level (chapter or section label,
+  then dotted numbering, then indentation), finds the shift between printed and PDF page
+  numbers by looking for the titles on the pages, and drops a table of contents whose headings
+  are mostly not found (a garbled one). Each page is cut where its headings are printed, so no
+  chunk straddles two sections; each chunk gets its `section_id` and its `context`; the table
+  of contents pages give no chunk. On the 28 guides: 12 have a usable table of contents (1,426
+  sections, 44 contents pages left out) and 88.5 % of the chunks have a section. The guides
+  without one (ventilation, the PSE flowcharts, the OCR guides) wait for the fallback of D18,
+  heading detection.
 - **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
   effect of OCR on retrieval and citations can be measured.
 - **Each page is routed, not guessed.** `pdftotext` (poppler) reads the text layer; `pdfimages`

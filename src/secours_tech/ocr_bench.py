@@ -25,6 +25,7 @@ from secours_tech.db import connect
 from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
 from secours_tech.ingest import Chunk, chunk_text, strip_repeated_lines
 from secours_tech.load import copy_chunks, renumber_chunks
+from secours_tech.structure import section_at
 
 REFERENCES = Path("data/ocr-reference")
 SAMPLES = (REFERENCES, REFERENCES / "validation")  # tuning sample, then held-out validation
@@ -227,8 +228,24 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
                     (document_id,),
                 ).fetchall()
             ]
+            (title,) = conn.execute(
+                "SELECT title FROM documents WHERE id = %s", (document_id,)
+            ).fetchone()
+            rows = conn.execute(
+                "SELECT id, page, path FROM sections WHERE document_id = %s ORDER BY ordinal",
+                (document_id,),
+            ).fetchall()
+            sections = [(section_id, f"{title} › {path}") for section_id, _, path in rows]
+
+            # OCR text is not cut at headings: a page goes to the section open at its top
+            starts = [start for _, start, _ in rows]
             chunks = [
-                Chunk(filename, page, piece)
+                Chunk(
+                    filename,
+                    page,
+                    piece,
+                    section_at(starts, page),
+                )
                 for page in pages
                 for piece in chunk_text(texts.get(page, ""))
             ]
@@ -236,7 +253,7 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
                 "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
                 (document_id,),
             ).fetchone()
-            copy_chunks(conn, document_id, chunks, start, extraction="ocr")
+            copy_chunks(conn, document_id, chunks, start, "ocr", sections=sections, title=title)
             renumber_chunks(conn, document_id)
             written[filename] = len(chunks)
     return written

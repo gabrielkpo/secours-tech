@@ -281,3 +281,35 @@ def test_a_guide_read_with_mixed_settings_is_not_indexed(conn):
     conn.execute("UPDATE pages SET ocr_engine = 'other' WHERE page = 2")
     guides = {"GTO-ok.pdf": GuideScore("GTO-ok.pdf", [PageScore(1, 0, 100, [], [])])}
     assert index_guides(conn, guides) == {}
+
+
+def test_sections_are_stored_and_chunks_carry_their_section_and_context(conn):
+    from secours_tech.structure import Section
+
+    sections = (
+        Section("CHAPITRE 1 - Ventilation", 1, 2, ("CHAPITRE 1 - Ventilation",)),
+        Section(
+            "1.1. Pression positive", 2, 2, ("CHAPITRE 1 - Ventilation", "1.1. Pression positive")
+        ),
+    )
+    texts = [
+        "Sommaire 2",
+        "Introduction du chapitre.\n1.1. Pression positive\nLe ventilateur souffle.",
+    ]
+    doc = SourceDocument("GTO-test.pdf", "a" * 64, texts, (), sections, frozenset({1}))
+    store_document(conn, doc)
+    rows = conn.execute(
+        "SELECT c.page, c.text, s.title, c.context FROM chunks c"
+        " LEFT JOIN sections s ON s.id = c.section_id ORDER BY c.position"
+    ).fetchall()
+    assert rows == [
+        (2, "Introduction du chapitre.", "CHAPITRE 1 - Ventilation",
+         "GTO test › CHAPITRE 1 - Ventilation"),
+        (2, "1.1. Pression positive Le ventilateur souffle.", "1.1. Pression positive",
+         "GTO test › CHAPITRE 1 - Ventilation › 1.1. Pression positive"),
+    ]  # fmt: skip
+    # the table of contents page gives no chunk, and the context is searched with the text
+    found = conn.execute(
+        "SELECT count(*) FROM chunks WHERE tsv @@ websearch_to_tsquery('fr', 'ventilation introduction')"
+    ).fetchone()[0]
+    assert found == 1

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
 from secours_tech.extract import Page, extract_pages
 from secours_tech.ingest import Chunk, pages_to_chunks
+from secours_tech.structure import Section, locate, read_toc
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +25,8 @@ class SourceDocument:
     sha256: str
     page_texts: list[str]
     pages: tuple[Page, ...] = ()  # per-page route and measures, when read from a PDF
+    sections: tuple[Section, ...] = ()  # from the printed table of contents (D18)
+    toc_pages: frozenset[int] = frozenset()  # the table of contents itself: no chunk
 
     @property
     def content_sha256(self) -> str:
@@ -63,9 +67,14 @@ def sha256_of(data: bytes) -> str:
 
 
 def read_source(path: Path, data: bytes) -> SourceDocument:
-    """Fingerprint the bytes already read and extract every page with poppler."""
+    """Fingerprint the bytes already read, extract every page and read the section tree."""
     pages = tuple(extract_pages(path))
-    return SourceDocument(path.name, sha256_of(data), [page.text for page in pages], pages)
+    texts = [page.text for page in pages]
+    entries, toc_pages = read_toc(path)
+    sections = tuple(locate(entries, texts, toc_pages))
+    if not sections:
+        toc_pages = set()  # contents not trusted: its pages are kept like any other
+    return SourceDocument(path.name, sha256_of(data), texts, pages, sections, frozenset(toc_pages))
 
 
 def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
@@ -80,20 +89,48 @@ def _textless_pages(doc: SourceDocument, chunks: list[Chunk]) -> int:
     return len(doc.page_texts) - len({chunk.page for chunk in chunks})
 
 
+def insert_sections(
+    conn: psycopg.Connection, document_id: int, title: str, sections: Sequence[Section]
+) -> list[tuple[int, str]]:
+    """Store a document's sections; returns (id, context "guide › … › section") per section."""
+    rows = []
+    for ordinal, section in enumerate(sections):
+        path = " › ".join(section.path)
+        (section_id,) = conn.execute(
+            "INSERT INTO sections (document_id, ordinal, level, title, path, page)"
+            " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (document_id, ordinal, section.level, section.title, path, section.page),
+        ).fetchone()
+        rows.append((section_id, f"{title} › {path}"))
+    return rows
+
+
 def copy_chunks(
     conn: psycopg.Connection,
     document_id: int,
     chunks: list[Chunk],
     start: int = 0,
     extraction: str = "text_layer",
+    sections: Sequence[tuple[int, str]] = (),
+    title: str | None = None,
 ) -> None:
+    """Write chunks with their section and context; `sections` is insert_sections' result and
+    `title` the context of a chunk outside any section."""
     # COPY streams all rows in one round trip: thousands of chunks load in about a second
     with (
         conn.cursor() as cur,
-        cur.copy("COPY chunks (document_id, page, position, text, extraction) FROM STDIN") as copy,
+        cur.copy(
+            "COPY chunks (document_id, page, position, text, extraction, section_id, context)"
+            " FROM STDIN"
+        ) as copy,
     ):
         for position, chunk in enumerate(chunks, start=start):
-            copy.write_row((document_id, chunk.page, position, chunk.text, extraction))
+            section_id, context = (
+                sections[chunk.section] if chunk.section is not None else (None, title)
+            )
+            copy.write_row(
+                (document_id, chunk.page, position, chunk.text, extraction, section_id, context)
+            )
 
 
 def renumber_chunks(conn: psycopg.Connection, document_id: int) -> None:
@@ -131,7 +168,9 @@ def store_document(
         ).fetchone()
         if duplicate:
             return None
-        chunks = pages_to_chunks(doc.filename, doc.page_texts)
+        chunks = pages_to_chunks(
+            doc.filename, doc.page_texts, sections=doc.sections, skip=doc.toc_pages
+        )
         textless = _textless_pages(doc, chunks)
         version = 1
         if entry is not None:
@@ -162,19 +201,22 @@ def store_document(
                 textless,
             ),
         ).fetchone()
-        copy_chunks(conn, row[0], chunks)
+        title = entry.title if entry else title_of(doc.filename)
+        sections = insert_sections(conn, row[0], title, doc.sections)
+        copy_chunks(conn, row[0], chunks, sections=sections, title=title)
         if doc.pages:
             with (
                 conn.cursor() as cur,
                 cur.copy(
-                    "COPY pages (document_id, page, route, letters, text_masks, images, quality)"
-                    " FROM STDIN"
+                    "COPY pages (document_id, page, route, letters, text_masks, images, quality,"
+                    " is_toc) FROM STDIN"
                 ) as copy,
             ):
                 for p in doc.pages:
                     copy.write_row(
-                        (row[0], p.number, p.route, p.letters, p.text_masks, p.images, p.quality)
-                    )
+                        (row[0], p.number, p.route, p.letters, p.text_masks, p.images, p.quality,
+                         p.number in doc.toc_pages)
+                    )  # fmt: skip
     return len(chunks)
 
 
@@ -185,24 +227,32 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
     OCR text already stored on a page is kept: a page newly routed to OCR has none yet and is
     picked up by the next OCR run. Returns the number of chunks.
     """
-    chunks = pages_to_chunks(doc.filename, doc.page_texts)
+    chunks = pages_to_chunks(
+        doc.filename, doc.page_texts, sections=doc.sections, skip=doc.toc_pages
+    )
     with conn.transaction():
         conn.execute(
             "DELETE FROM chunks WHERE document_id = %s AND extraction = 'text_layer'",
             (document_id,),
         )
+        conn.execute("DELETE FROM sections WHERE document_id = %s", (document_id,))
+        (title,) = conn.execute(
+            "SELECT title FROM documents WHERE id = %s", (document_id,)
+        ).fetchone()
+        sections = insert_sections(conn, document_id, title, doc.sections)
         start = conn.execute(
             "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
             (document_id,),
         ).fetchone()[0]
-        copy_chunks(conn, document_id, chunks, start)
+        copy_chunks(conn, document_id, chunks, start, sections=sections, title=title)
         renumber_chunks(conn, document_id)
         for p in doc.pages:
             conn.execute(
                 "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"
-                " quality = %s WHERE document_id = %s AND page = %s",
-                (p.route, p.letters, p.text_masks, p.images, p.quality, document_id, p.number),
-            )
+                " quality = %s, is_toc = %s WHERE document_id = %s AND page = %s",
+                (p.route, p.letters, p.text_masks, p.images, p.quality,
+                 p.number in doc.toc_pages, document_id, p.number),
+            )  # fmt: skip
         conn.execute(
             "UPDATE documents SET content_sha256 = %s, textless_page_count = %s WHERE id = %s",
             (doc.content_sha256, _textless_pages(doc, chunks), document_id),
