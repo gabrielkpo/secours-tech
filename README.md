@@ -103,7 +103,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
-| J2 Evaluation set v1 | 30 questions with expected answers and pages, written before any run | planned |
+| J2 Evaluation set v1 | 30 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | in progress |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
@@ -114,8 +114,11 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J10 Final evaluation | 60 to 100 cases, frozen test split, results in this README | planned |
 | J11 Comparison | Same pipeline built with Mistral's managed tools (Document Library, OCR), scored on the same bench | planned |
 
-**Evaluation plan.** Questions, expected facts and expected pages are written by hand from the
-guides **before** the system runs, and are never shown to the model. Each case runs 3 times. Planned
+**Evaluation plan.** Questions, expected facts and expected pages are drafted by Claude from the
+guide pages themselves (read straight from the PDFs, never through the system under test), each
+fact backed by a verbatim excerpt and its page, then checked and corrected case by case by a
+firefighter (the author); only validated or corrected cases enter the set. This happens
+**before** the system runs, and expected answers are never shown to the model. Each case runs 3 times. Planned
 measures: whether the right page is in the top 5 retrieved chunks, answer accuracy graded by hand,
 rate of citations that pass the equality check, correct refusals on out-of-scope questions,
 latency and cost per question. Serious faults (invented citation, figure absent from the sources,
