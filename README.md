@@ -164,9 +164,10 @@ milestones need (server side only).
 
 ## Limitations / next
 
-- **Pages waiting for OCR.** Of the 2,993 pages of the 28 official guides, 1,069 are routed to
-  OCR (in 12 guides each line of text is drawn as an image; others are image pages) and 184 are
-  blank. Their OCR text (Tesseract, French model) is stored but indexed guide by guide, only
+- **Pages waiting for OCR.** Of the 2,993 pages of the 28 official guides, 1,192 are routed to
+  OCR and 184 are blank. In 12 guides each line of text is drawn as an image; in 2 more
+  (structure fires, ULM) the text layer is garbled by a font without a ToUnicode table; the
+  rest are image pages. Their OCR text (Tesseract, French model) is stored but indexed guide by guide, only
   once a hand-checked sample reads every number right and 99 % of the characters.
 - **No answers yet.** Retrieval, generation and the citation check are designed but not built,
   so there are no results to report.
