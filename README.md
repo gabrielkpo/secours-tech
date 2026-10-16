@@ -115,14 +115,15 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J11 Comparison | Same pipeline built with Mistral's managed tools (Document Library, OCR), scored on the same bench | planned |
 
 **Evaluation plan.** Questions, expected facts and expected pages are drafted by Claude from the
-guide pages themselves (read straight from the PDFs, never through the system under test), each
-fact backed by a verbatim excerpt and its page, then checked and corrected case by case by a
-firefighter (the author); only validated or corrected cases enter the set. This happens
-**before** the system runs, and expected answers are never shown to the model. Each case runs 3 times. Planned
-measures: whether the right page is in the top 5 retrieved chunks, answer accuracy graded by hand,
-rate of citations that pass the equality check, correct refusals on out-of-scope questions,
-latency and cost per question. Serious faults (invented citation, figure absent from the sources,
-out-of-scope question answered, individual medical advice) must stay at 0. Baselines: the LLM alone without retrieval, then each retrieval variant.
+guide pages themselves (read straight from the PDFs, never through the system under test), each fact
+backed by a verbatim excerpt and its page, then checked and corrected case by case by a firefighter
+(the author); only validated or corrected cases enter the set. This happens **before** the system
+runs, and expected answers are never shown to the model. Each case runs 3 times. Planned measures:
+whether the right page is in the top 5 retrieved chunks, answer accuracy graded by hand, rate of
+citations that pass the equality check, correct refusals on out-of-scope questions, latency and cost
+per question. Serious faults (invented citation, figure absent from the sources, out-of-scope
+question answered, individual medical advice) must stay at 0. Baselines: the LLM alone without
+retrieval, then each retrieval variant.
 
 ## Run it
 
