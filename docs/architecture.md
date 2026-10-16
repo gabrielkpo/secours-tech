@@ -69,12 +69,15 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   files them and updates the manifest.
 - **OCR is stored, then gated.** `python -m secours_tech.ocr` copies each page routed to `ocr`
   without its pictures (`pikepdf`: every image that is not a few-pixel text mask is removed, so
-  photos, drawings and grey boxes neither hide text nor read as gibberish), renders it at
-  600 dpi (`pdftoppm`) and reads it with Tesseract 5 (LSTM, Sauvola binarisation) and the French
-  `tessdata_best` model, pinned to one commit and checked by SHA-256. These settings were chosen
-  on the first hand-checked sample: guides passing went from 1 to 5 of 12, then 4 of 12 on the
-  validation sample. Text, mean word confidence and the engine with its settings go on the page
-  row; a page read with other settings is read again. Nothing is indexed yet. A guide's OCR text becomes chunks only if a hand-transcribed
+  photos, drawings and grey boxes neither hide text nor read as gibberish) and reads it with
+  **Mistral OCR** (`mistral-ocr-4-1`, pinned; its Markdown is turned into plain text, superscripts
+  written inline). Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
+  pages, 10 of 14 guides pass with Mistral OCR, 2 with Tesseract tuned (text-only copy, 600 dpi,
+  Sauvola). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as
+  a local checker only: offline and without a key, it reads a page whose text layer looks
+  garbled so the loader can confirm it; its text is never indexed (`--engine tesseract` still
+  runs it on every OCR page, for comparison). Text and the engine with its settings go on the
+  page row; a page read with another engine or other settings is read again. A guide's OCR text becomes chunks only if a hand-transcribed
   sample of its pages passes `python -m secours_tech.ocr_bench score`: every number read exactly
   (none missing, none added) and a character error rate of at most 1 %. Otherwise the guide
   stays uncovered. Only pages with text drawn as images, or whose text layer was rejected as
