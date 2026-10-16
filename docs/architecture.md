@@ -73,7 +73,8 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   **Mistral OCR** (`mistral-ocr-4-1`, pinned; its Markdown is turned into plain text, superscripts
   written inline). Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
   pages, 10 of 14 guides pass with Mistral OCR, 2 with Tesseract tuned (text-only copy, 600 dpi,
-  Sauvola). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as
+  Sauvola). On the full run, scored by `ocr_bench index`, 11 of the 14 sampled guides pass
+  (`corpus/ocr-validation.toml`). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as
   a local checker only: offline and without a key, it reads a page whose text layer looks
   garbled so the loader can confirm it; its text is never indexed (`--engine tesseract` still
   runs it on every OCR page, for comparison). Text and the engine with its settings go on the
