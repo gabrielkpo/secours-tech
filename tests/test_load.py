@@ -313,3 +313,63 @@ def test_sections_are_stored_and_chunks_carry_their_section_and_context(conn):
         "SELECT count(*) FROM chunks WHERE tsv @@ websearch_to_tsquery('fr', 'ventilation introduction')"
     ).fetchone()[0]
     assert found == 1
+
+
+def test_headings_found_by_the_loader_are_stored_with_their_origin(conn):
+    from secours_tech.structure import Section
+
+    sections = (Section("1. Objectif", 1, 1, ("1. Objectif",)),)
+    doc = SourceDocument(
+        "GTO-test.pdf", "a" * 64, ["1. Objectif\nVentiler."], (), sections,
+        sections_origin="headings",
+    )  # fmt: skip
+    store_document(conn, doc)
+    assert conn.execute("SELECT title, origin FROM sections").fetchall() == [
+        ("1. Objectif", "headings")
+    ]
+
+
+def test_an_ocr_guide_without_sections_is_cut_at_the_headings_of_its_ocr_text(conn):
+    from secours_tech.ocr_bench import GuideScore, PageScore, index_guides
+
+    texts = [
+        "Sommaire\nVEN-ABC-1 Un\nVEN-ABC-2 Deux\nVEN-ABC-3 Trois\nVEN-ABC-4 Quatre",
+        "Avant-propos du guide.\n1. Objectif\nVentiler le local.",
+        "2. Moyens\nUn ventilateur.",
+    ]
+    _ocr_guide(conn, "GTO-ok.pdf", "a" * 64, texts)
+    guides = {"GTO-ok.pdf": GuideScore("GTO-ok.pdf", [PageScore(2, 0, 100, [], [])])}
+    assert index_guides(conn, guides) == {"GTO-ok.pdf": 3}
+    assert index_guides(conn, guides) == {"GTO-ok.pdf": 3}  # sections are replaced, not added
+    rows = conn.execute(
+        "SELECT c.page, c.text, s.origin, c.context FROM chunks c"
+        " LEFT JOIN sections s ON s.id = c.section_id ORDER BY c.position"
+    ).fetchall()
+    assert rows == [
+        (2, "Avant-propos du guide.", None, "GTO ok"),
+        (2, "1. Objectif Ventiler le local.", "ocr", "GTO ok › 1. Objectif"),
+        (3, "2. Moyens Un ventilateur.", "ocr", "GTO ok › 2. Moyens"),
+    ]  # the page listing fiches gives no chunk
+    assert conn.execute("SELECT page FROM pages WHERE is_toc").fetchall() == [(1,)]
+
+    # a guide that no longer passes loses its OCR chunks and the sections read from them
+    guides["GTO-ok.pdf"] = GuideScore("GTO-ok.pdf", [PageScore(2, 0, 100, ["10"], [])])
+    assert index_guides(conn, guides) == {}
+    assert conn.execute("SELECT count(*) FROM sections").fetchone()[0] == 0
+
+
+def test_reextract_keeps_the_sections_read_from_ocr_text(conn):
+    from secours_tech.load import reextract_document
+    from secours_tech.ocr_bench import GuideScore, PageScore, index_guides
+
+    _ocr_guide(
+        conn, "GTO-ok.pdf", "a" * 64, ["1. Objectif\nVentiler.", "2. Moyens\nUn ventilateur."]
+    )
+    guides = {"GTO-ok.pdf": GuideScore("GTO-ok.pdf", [PageScore(1, 0, 100, [], [])])}
+    index_guides(conn, guides)
+    (doc_id,) = conn.execute("SELECT id FROM documents").fetchone()
+    pages = tuple(Page(i, "", "ocr", 120, 25, 26, 1.0) for i in (1, 2))
+    reextract_document(conn, doc_id, SourceDocument("GTO-ok.pdf", "a" * 64, ["", ""], pages))
+    assert (
+        conn.execute("SELECT count(*) FROM chunks WHERE section_id IS NOT NULL").fetchone()[0] == 2
+    )

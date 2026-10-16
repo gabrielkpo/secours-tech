@@ -3,6 +3,7 @@ from secours_tech.structure import (
     Section,
     _levels,
     _toc_lines,
+    detect_headings,
     locate,
     section_at,
     split_page,
@@ -76,3 +77,64 @@ def test_a_page_is_cut_where_its_headings_start():
 def test_section_at_takes_the_last_section_started():
     assert section_at([5, 9, 9, 12], 10) == 2
     assert section_at([5, 9], 4) is None
+
+
+FICHES = [
+    (
+        "Sommaire\nVEN-STR-PRO-1 Recloisonnement\nVEN-STR-PRO-2 Désenfumage\n"
+        "VEN-STR-ATT-1 Ouvrant\nVEN-STR-ATT-2 Ventilateur"
+    ),
+    (
+        "VEN-STR-PRO\nVENTILER POUR PROTEGER\nVEN-STR-PRO-1 Recloisonnement du feu\n"
+        "1. Objectif\nLimiter la propagation des fumées."
+    ),
+    (
+        "2.\nMise en œuvre\nLes étapes sont les suivantes :\n"
+        "3. Fermer les portes, puis contrôler les volumes voisins avant toute autre action;"
+    ),
+]
+
+
+def test_headings_give_a_structure_when_there_is_no_table_of_contents():
+    sections, listing = detect_headings(FICHES)
+    assert listing == {1}  # a page listing fiche codes is a contents page, not read
+    assert [(s.title, s.level, s.page) for s in sections] == [
+        ("VEN-STR-PRO VENTILER POUR PROTEGER", 1, 2),
+        ("VEN-STR-PRO-1 Recloisonnement du feu", 2, 2),
+        ("1. Objectif", 3, 2),
+        ("2. Mise en œuvre", 3, 3),  # a number alone on its line takes the next line as title
+    ]  # a sentence ending in ";" is a list item, not a heading
+    assert sections[-1].path == (
+        "VEN-STR-PRO VENTILER POUR PROTEGER",
+        "VEN-STR-PRO-1 Recloisonnement du feu",
+        "2. Mise en œuvre",
+    )
+
+
+def test_a_printed_contents_page_in_ocr_text_gives_no_heading():
+    contents = (
+        "Sommaire\nCHAPITRE 1 - Connaissances générales 11\n1. Les biens culturels 11\n"
+        "1.1. Définition...11\n1.2. Les différents biens culturels...12\n"
+        "2. La vulnérabilité du patrimoine 14"
+    )
+    body = "CHAPITRE 1 - Connaissances générales\n1. Les biens culturels\nUn bien culturel est..."
+    sections, listing = detect_headings([contents, body])
+    assert listing == {1}
+    assert [(s.title, s.page) for s in sections] == [
+        ("CHAPITRE 1 - Connaissances générales", 2),
+        ("1. Les biens culturels", 2),
+    ]
+
+
+def test_sentences_and_lists_are_neither_headings_nor_contents():
+    lists = "Matériel :\n1. Lance de 45\n2. Lance de 70\n3. Tuyau de 110\n4. Division 65"
+    sentences = (
+        "Partie haute du local à ventiler\nPartie ci-dessous\nSection d'intervention\n"
+        "Annexe B\nSECTION I-CONNAISSANCE DU RISQUE\nLes fumées montent."
+    )
+    sections, listing = detect_headings([lists, sentences])
+    assert listing == set()  # page numbers of a contents only go up
+    assert [s.title for s in sections] == [
+        "1. Lance de 45", "2. Lance de 70", "3. Tuyau de 110", "4. Division 65", "Annexe B",
+        "SECTION I-CONNAISSANCE DU RISQUE",
+    ]  # fmt: skip
