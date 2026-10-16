@@ -129,12 +129,20 @@ Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesserac
 ```bash
 uv sync --locked
 createdb secours_tech                      # Postgres 17 with pgvector and unaccent
-DATABASE_URL=postgresql:///secours_tech uv run python -m secours_tech.load data/raw
+export DATABASE_URL=postgresql:///secours_tech
+uv run python -m secours_tech.load data/raw          # text layer, page routes, sections
+uv run python -m secours_tech.ocr data/raw           # OCR of the pages routed to OCR (~45 min)
+uv run python -m secours_tech.ocr_bench index        # index the OCR of the guides that pass
 uv run pytest                              # set TEST_DATABASE_URL to run the database tests
 ```
 
 The loader applies the SQL migrations, then stores each PDF in `documents` (SHA-256, page count,
-pages without text) and its chunks in `chunks` (page, text, extraction method, full-text vector). Running it twice changes nothing. `.env.example` lists the Mistral key the next
+pages without text), its pages with their route, its sections read from the printed table of
+contents, and its chunks in `chunks` (page, text, section and context, extraction method,
+full-text vector). Running it twice changes nothing; after a change to the extraction or the
+structure, `load data/raw --reextract` applies it to the guides already loaded. `ocr_bench index`
+needs the hand transcriptions in `data/ocr-reference/` (kept out of Git) and writes its decision
+to `corpus/ocr-validation.toml`. `.env.example` lists the Mistral key the next
 milestones need (server side only).
 
 ## Project structure

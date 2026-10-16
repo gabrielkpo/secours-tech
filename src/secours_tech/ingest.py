@@ -4,10 +4,13 @@ import argparse
 import json
 import logging
 import re
+from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from secours_tech.extract import extract_pages
+from secours_tech.structure import Section, split_page
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +22,7 @@ class Chunk:
     document: str
     page: int  # 1-based, as printed in a PDF viewer
     text: str
+    section: int | None = None  # index in the document's sections, None when it has none
 
 
 def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
@@ -82,14 +86,30 @@ def strip_repeated_lines(pages: list[str], min_pages: int = 3, ratio: float = 0.
     return ["\n".join(ln for ln in p.splitlines() if not is_boilerplate(ln)) for p in pages]
 
 
-def pages_to_chunks(document: str, page_texts: list[str], size: int = 800) -> list[Chunk]:
-    """Chunk already-extracted page texts. Pages with no text are reported, not hidden."""
+def pages_to_chunks(
+    document: str,
+    page_texts: list[str],
+    size: int = 800,
+    sections: Sequence[Section] = (),
+    skip: AbstractSet[int] = frozenset(),
+) -> list[Chunk]:
+    """Chunk already-extracted page texts. Pages with no text are reported, not hidden.
+
+    With the guide's sections, a page is first cut where its headings are printed, so that no
+    chunk straddles two sections and each knows its own. Pages in `skip` (the table of contents)
+    give no chunk.
+    """
     chunks: list[Chunk] = []
     for number, text in enumerate(strip_repeated_lines(page_texts), start=1):
+        if number in skip:
+            continue
         if not text.strip():
             log.warning("%s page %d has no extractable text (scanned page?)", document, number)
             continue
-        chunks.extend(Chunk(document, number, piece) for piece in chunk_text(text, size))
+        for section, piece in split_page(text, number, list(sections)):
+            chunks.extend(
+                Chunk(document, number, part, section) for part in chunk_text(piece, size)
+            )
     return chunks
 
 
