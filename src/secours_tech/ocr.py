@@ -85,19 +85,28 @@ def text_from_tsv(tsv: str) -> OcrResult:
 
 
 def _is_text_mask(image) -> bool:
-    """A line of text drawn as an image: a few pixels of colour cut out by a 1-bit mask."""
+    """A line of text drawn as an image: a 1-bit stencil filled with the text colour, or a few
+    pixels of colour cut out by a 1-bit soft mask (how the ministry's Word exports do it)."""
+    if bool(image.get("/ImageMask", False)):
+        return True
     small = int(image.get("/Width", 0)) <= 4 and int(image.get("/Height", 0)) <= 4
-    return small and ("/SMask" in image or bool(image.get("/ImageMask", False)))
+    return small and "/SMask" in image
 
 
-def _drop_pictures(pdf: pikepdf.Pdf, owner) -> None:
-    """Remove the drawing of every image that is not a text mask, in a page or a form XObject."""
+def _drop_pictures(pdf: pikepdf.Pdf, owner, seen: set | None = None) -> None:
+    """Remove the drawing of every image that is not a text mask, in a page or a form XObject.
+
+    Each form is cleaned once, even when several parents share it or it refers to itself.
+    """
+    seen = set() if seen is None else seen
     dictionary = owner.obj if isinstance(owner, pikepdf.Page) else owner
     xobjects = dictionary.get("/Resources", {}).get("/XObject", {})
     pictures = set()
     for name, xobject in xobjects.items():
         if xobject.get("/Subtype") == "/Form":
-            _drop_pictures(pdf, xobject)
+            if xobject.objgen not in seen:
+                seen.add(xobject.objgen)
+                _drop_pictures(pdf, xobject, seen)
         elif xobject.get("/Subtype") == "/Image" and not _is_text_mask(xobject):
             pictures.add(str(name))
     if not pictures:
