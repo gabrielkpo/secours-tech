@@ -56,8 +56,9 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   row; a page read with other settings is read again. Nothing is indexed yet. A guide's OCR text becomes chunks only if a hand-transcribed
   sample of its pages passes `python -m secours_tech.ocr_bench score`: every number read exactly
   (none missing, none added) and a character error rate of at most 1 %. Otherwise the guide
-  stays uncovered. Only pages with text drawn as images are sampled and can be indexed; image
-  pages (photos, diagrams) are OCRed for measurement but stay uncovered. The score compares
+  stays uncovered. Only pages with text drawn as images, or whose text layer was rejected as
+  garbled, are sampled and can be indexed; image pages (photos, diagrams) are OCRed for
+  measurement but stay uncovered. The score compares
   text, not layout: the running footer is removed from the OCR text the way chunking removes
   it (lines repeated on half the pages, compared by their words so logo noise such as "@&"
   does not hide them). On both sides, list bullets (read by the OCR as a lone "e", "o" or
@@ -67,4 +68,7 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   apart (`img-p<N>.txt`) and `--with-image-labels` scores them for information. Two samples:
   one to tune the engine, and a validation sample drawn with another seed that excludes it
   (`sample --exclude`), so a setting is judged on pages it was not tuned on. Transcriptions
-  live outside Git (`data/ocr-reference/`): they are doctrine text.
+  live outside Git (`data/ocr-reference/`): they are doctrine text. `ocr_bench index` scores
+  each guide on both samples together, gives the guides that pass OCR chunks
+  (`extraction = 'ocr'`) and takes them away from the others, and writes the decision to
+  `corpus/ocr-validation.toml` (scores only), versioned with the code.

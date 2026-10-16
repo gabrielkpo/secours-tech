@@ -80,16 +80,20 @@ def _textless_pages(doc: SourceDocument, chunks: list[Chunk]) -> int:
     return len(doc.page_texts) - len({chunk.page for chunk in chunks})
 
 
-def _copy_chunks(
-    conn: psycopg.Connection, document_id: int, chunks: list[Chunk], start: int = 0
+def copy_chunks(
+    conn: psycopg.Connection,
+    document_id: int,
+    chunks: list[Chunk],
+    start: int = 0,
+    extraction: str = "text_layer",
 ) -> None:
     # COPY streams all rows in one round trip: thousands of chunks load in about a second
     with (
         conn.cursor() as cur,
-        cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
+        cur.copy("COPY chunks (document_id, page, position, text, extraction) FROM STDIN") as copy,
     ):
         for position, chunk in enumerate(chunks, start=start):
-            copy.write_row((document_id, chunk.page, position, chunk.text))
+            copy.write_row((document_id, chunk.page, position, chunk.text, extraction))
 
 
 def store_document(
@@ -140,7 +144,7 @@ def store_document(
                 textless,
             ),
         ).fetchone()
-        _copy_chunks(conn, row[0], chunks)
+        copy_chunks(conn, row[0], chunks)
         if doc.pages:
             with (
                 conn.cursor() as cur,
@@ -173,7 +177,7 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
             (document_id,),
         ).fetchone()[0]
-        _copy_chunks(conn, document_id, chunks, start)
+        copy_chunks(conn, document_id, chunks, start)
         for p in doc.pages:
             conn.execute(
                 "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"

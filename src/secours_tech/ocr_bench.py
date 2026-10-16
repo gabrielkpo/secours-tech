@@ -22,10 +22,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from secours_tech.db import connect
-from secours_tech.extract import MIN_TEXT_MASKS
-from secours_tech.ingest import strip_repeated_lines
+from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
+from secours_tech.ingest import Chunk, chunk_text, strip_repeated_lines
+from secours_tech.load import copy_chunks
 
 REFERENCES = Path("data/ocr-reference")
+SAMPLES = (REFERENCES, REFERENCES / "validation")  # tuning sample, then held-out validation
+RECORD = Path("corpus/ocr-validation.toml")
+# Pages whose OCR text can be indexed: text drawn as images (text masks) or a text layer that was
+# rejected as garbled. Image pages (photos, diagrams) are read for measurement only.
+INDEXABLE = f"p.route = 'ocr' AND (p.text_masks >= {MIN_TEXT_MASKS} OR p.letters >= {MIN_LETTERS})"
 MAX_CER = 0.01
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 _BULLET = re.compile(r"^\s*[•●▪■◦○·*°✓✔eo\-–—]\s+")
@@ -122,16 +128,14 @@ def transcriptions(folder: Path) -> list[tuple[Path, str, int]]:
 def sample(
     conn, per_guide: int, seed: int, exclude: frozenset[tuple[str, int]] = frozenset()
 ) -> dict[str, list[int]]:
-    """Pages to transcribe: a seeded random draw among each guide's OCR pages with text masks.
+    """Pages to transcribe: a seeded random draw among each guide's indexable OCR pages.
 
     Pages in `exclude` (pdf stem, page), already transcribed for an earlier sample, are not drawn
     again: a validation sample stays apart from the one the engine was tuned on.
     """
     rows = conn.execute(
         "SELECT d.filename, p.page FROM pages p JOIN documents d ON d.id = p.document_id"
-        " WHERE p.route = 'ocr' AND p.text_masks >= %s AND d.retired_at IS NULL"
-        " ORDER BY d.filename, p.page",
-        (MIN_TEXT_MASKS,),
+        f" WHERE {INDEXABLE} AND d.retired_at IS NULL ORDER BY d.filename, p.page"
     ).fetchall()
     by_guide: dict[str, list[int]] = {}
     for filename, page in rows:
@@ -160,6 +164,98 @@ def ocr_pages(conn, filename: str) -> dict[int, str]:
     return {page: text for (page, _), text in zip(rows, cleaned, strict=True)}
 
 
+def score_guides(
+    conn, folders: list[Path], with_image_labels: bool = False
+) -> dict[str, GuideScore]:
+    """Score each guide's stored OCR text against every transcribed page of the given samples."""
+    guides: dict[str, GuideScore] = {}
+    ocr_by_guide: dict[str, dict[int, str]] = {}
+    for folder in folders:
+        for reference, stem, page in transcriptions(folder):
+            filename = f"{stem}.pdf"
+            if filename not in ocr_by_guide:
+                ocr_by_guide[filename] = ocr_pages(conn, filename)
+            ocr = ocr_by_guide[filename].get(page)
+            if ocr is None:
+                print(f"no OCR text yet for {reference}")
+                continue
+            text = reference.read_text(encoding="utf-8")
+            labels = reference.with_name(f"img-{reference.name}")
+            if with_image_labels and labels.exists():
+                text += "\n" + labels.read_text(encoding="utf-8")
+            guides.setdefault(filename, GuideScore(filename)).pages.append(
+                score_page(page, text, ocr)
+            )
+    return guides
+
+
+def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
+    """Make the OCR chunks of every current guide match the reliability check.
+
+    A guide that passes gets the OCR text of its indexable pages as chunks (`extraction = 'ocr'`);
+    any other guide, failed or never sampled, keeps none. Returns the chunks written per guide.
+    """
+    written = {}
+    documents = conn.execute(
+        "SELECT DISTINCT d.id, d.filename FROM documents d JOIN pages p ON p.document_id = d.id"
+        f" WHERE d.retired_at IS NULL AND {INDEXABLE} ORDER BY d.filename"
+    ).fetchall()
+    for document_id, filename in documents:
+        with conn.transaction():
+            conn.execute(
+                "DELETE FROM chunks WHERE document_id = %s AND extraction = 'ocr'", (document_id,)
+            )
+            guide = guides.get(filename)
+            if guide is None or not guide.passed:
+                continue
+            texts = ocr_pages(conn, filename)
+            pages = [
+                page
+                for (page,) in conn.execute(
+                    f"SELECT p.page FROM pages p WHERE p.document_id = %s AND {INDEXABLE}"
+                    " ORDER BY p.page",
+                    (document_id,),
+                ).fetchall()
+            ]
+            chunks = [
+                Chunk(filename, page, piece)
+                for page in pages
+                for piece in chunk_text(texts.get(page, ""))
+            ]
+            (start,) = conn.execute(
+                "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
+                (document_id,),
+            ).fetchone()
+            copy_chunks(conn, document_id, chunks, start, extraction="ocr")
+            written[filename] = len(chunks)
+    return written
+
+
+def write_record(
+    path: Path, guides: dict[str, GuideScore], written: dict[str, int], engines: dict[str, str]
+) -> None:
+    """The reliability record, versioned: scores and decisions only, never doctrine text."""
+    lines = [
+        "# OCR reliability check per guide (python -m secours_tech.ocr_bench index).",
+        "# Rule: every number exact and a character error rate of at most 1 % on the",
+        "# hand-transcribed pages (tuning and validation samples). Only scores live here.",
+        "",
+    ]
+    for name, guide in sorted(guides.items()):
+        lines += [
+            "[[guide]]",
+            f'file = "{name}"',
+            f'engine = "{engines.get(name, "")}"',
+            f"pages_checked = {sorted(p.page for p in guide.pages)}",
+            f"character_error_rate = {guide.cer:.4f}",
+            f"numbers_exact = {str(guide.numbers_exact).lower()}",
+            f"passed = {str(guide.passed).lower()}",
+            f"chunks_indexed = {written.get(name, 0)}",
+            "",
+        ]
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Check OCR reliability against hand transcriptions."
@@ -177,6 +273,13 @@ def main(argv: list[str] | None = None) -> None:
         default=[],
         help="folder of an earlier sample, whose transcribed pages are not drawn again (repeatable)",
     )
+    index = sub.add_parser(
+        "index", help="index the OCR text of the guides that pass, and write the record"
+    )
+    index.add_argument(
+        "samples", type=Path, nargs="*", default=list(SAMPLES), help="transcription folders"
+    )
+    index.add_argument("--record", type=Path, default=RECORD)
     score = sub.add_parser("score", help="score the OCR text against the transcriptions")
     score.add_argument(
         "--with-image-labels",
@@ -204,22 +307,20 @@ def main(argv: list[str] | None = None) -> None:
                     print(f"to transcribe: {image}.png -> {image}.txt")
             return
 
-        guides: dict[str, GuideScore] = {}
-        ocr_by_guide: dict[str, dict[int, str]] = {}
-        for reference, stem, page in transcriptions(args.references):
-            filename = f"{stem}.pdf"
-            if filename not in ocr_by_guide:
-                ocr_by_guide[filename] = ocr_pages(conn, filename)
-            ocr = ocr_by_guide[filename].get(page)
-            if ocr is None:
-                print(f"no OCR text yet for {reference}")
-                continue
-            text = reference.read_text(encoding="utf-8")
-            labels = reference.with_name(f"img-{reference.name}")
-            if args.with_image_labels and labels.exists():
-                text += "\n" + labels.read_text(encoding="utf-8")
-            guide = guides.setdefault(filename, GuideScore(filename))
-            guide.pages.append(score_page(page, text, ocr))
+        if args.command == "index":
+            guides = score_guides(conn, args.samples)
+            written = index_guides(conn, guides)
+            engines = dict(
+                conn.execute(
+                    "SELECT d.filename, max(p.ocr_engine) FROM pages p JOIN documents d"
+                    " ON d.id = p.document_id WHERE d.retired_at IS NULL GROUP BY d.filename"
+                ).fetchall()
+            )
+            write_record(args.record, guides, written, engines)
+            print(f"{sum(written.values())} OCR chunks indexed for {len(written)} guide(s);"
+                  f" record written to {args.record}")  # fmt: skip
+        else:
+            guides = score_guides(conn, [args.references], args.with_image_labels)
 
     for guide in guides.values():
         verdict = "PASS" if guide.passed else "FAIL"

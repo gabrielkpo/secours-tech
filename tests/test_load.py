@@ -223,3 +223,40 @@ def test_reextract_replaces_text_chunks_and_routes_but_keeps_ocr_text(conn):
     assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == 0
     routes = conn.execute("SELECT page, route, ocr_text FROM pages ORDER BY page").fetchall()
     assert routes == [(1, "ocr", None), (2, "ocr", "Ventiler le local.")]
+
+
+def _ocr_guide(conn, filename, sha, texts):
+    pages = tuple(Page(i, "", "ocr", 120, 25, 26, 1.0) for i in range(1, len(texts) + 1))
+    store_document(conn, SourceDocument(filename, sha, [""] * len(texts), pages))
+    for page, text in enumerate(texts, start=1):
+        conn.execute(
+            "UPDATE pages SET ocr_text = %s, ocr_engine = 'test' FROM documents d"
+            " WHERE d.id = pages.document_id AND d.filename = %s AND page = %s",
+            (text, filename, page),
+        )
+
+
+def test_only_guides_that_pass_get_ocr_chunks_and_indexing_is_idempotent(conn, tmp_path):
+    from secours_tech.ocr_bench import GuideScore, PageScore, index_guides, write_record
+
+    _ocr_guide(conn, "GTO-ok.pdf", "a" * 64, ["Ventiler le local.", "Couper le gaz."])
+    _ocr_guide(conn, "GTO-ko.pdf", "b" * 64, ["Baliser la zone.", "Éclairer."])
+    guides = {
+        "GTO-ok.pdf": GuideScore("GTO-ok.pdf", [PageScore(1, 0, 100, [], [])]),
+        "GTO-ko.pdf": GuideScore("GTO-ko.pdf", [PageScore(1, 0, 100, ["10"], [])]),
+    }
+    assert index_guides(conn, guides) == {"GTO-ok.pdf": 2}
+    assert index_guides(conn, guides) == {"GTO-ok.pdf": 2}  # a rerun replaces, never adds
+    rows = conn.execute(
+        "SELECT d.filename, c.page, c.text, c.extraction FROM chunks c"
+        " JOIN documents d ON d.id = c.document_id ORDER BY 1, 2"
+    ).fetchall()
+    assert rows == [
+        ("GTO-ok.pdf", 1, "Ventiler le local.", "ocr"),
+        ("GTO-ok.pdf", 2, "Couper le gaz.", "ocr"),
+    ]
+    record = tmp_path / "record.toml"
+    write_record(record, guides, {"GTO-ok.pdf": 2}, {"GTO-ok.pdf": "test"})
+    text = record.read_text()
+    assert 'file = "GTO-ko.pdf"' in text and "passed = false" in text
+    assert "chunks_indexed = 2" in text and "Ventiler" not in text  # scores only, no doctrine
