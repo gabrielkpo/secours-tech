@@ -8,8 +8,8 @@ heading starts in the PDF (printed numbers can be shifted from the PDF's own pag
 tells which pages are the table of contents itself, so they can be kept out of the search.
 
 A guide that prints no usable table of contents falls back on its headings (`detect_headings`):
-a fiche code line ("VEN-STR-PRO-1") with the title under it, "Chapitre"/"Section"/"Annexe"
-lines, and dotted numbering ("6.1. Choix du ventilateur", or "6.1." alone with the title on the
+a fiche code line ("VEN-STR-PRO-1") with its title, "Chapitre 2"/"Section 1"/"Annexe B" lines,
+and dotted numbering ("6.1. Choix du ventilateur", or "6.1." alone with the title on the
 next line).
 
 Level of a line, from the strongest clue to the weakest: "Chapitre"/"Annexe"/"Partie" is 1;
@@ -21,7 +21,6 @@ import re
 import subprocess
 import unicodedata
 from collections import Counter
-from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -262,46 +261,66 @@ def _title_like(text: str) -> bool:
     )
 
 
-MIN_LISTED = 4  # a table of contents: a page naming this many fiche codes, or this many headings
-# with their page number making up most of its lines; its lines are not headings, it gives no chunk
-_PAGE_REFERENCE = re.compile(r"\D(?:\s|\.{2,}|…|_{2,})+\d{1,3}$")  # "Titre 12", "Titre...12"
+MIN_LISTED = 4  # a table of contents: this many fiche codes, or headings with their page number
+_PAGE_REFERENCE = re.compile(
+    r"\D(?:\s|\.{2,}|…|_{2,})+(?P<page>\d{1,3})$"
+)  # "Titre 12", "Titre...12"
+# a chapter or section heading names its number or letter: "Partie haute du local" is a sentence
+_LABELLED = re.compile(
+    r"^(?:(?P<top>chapitre|annexe|partie|titre)|section)\s+(?:\d+|[IVXLC]+|[A-Z])\b",
+    re.IGNORECASE,
+)
+
+
+def _codes(lines: list[str]) -> int:
+    return sum(bool(_FICHE_CODE.match(line.split()[0])) for line in lines)
 
 
 def _is_contents(lines: list[str]) -> bool:
-    codes = sum(bool(_FICHE_CODE.match(line.split()[0])) for line in lines)
-    entries = sum(
-        bool(_TOP.match(line) or _SECTION.match(line) or _NUMBERED.match(line))
-        and bool(_PAGE_REFERENCE.search(line))
+    """A printed table of contents: fiche codes making up a third of the lines (a code, its title
+    under it), or headings followed by page numbers that only go up, making up half of them."""
+    codes = _codes(lines)
+    if codes >= MIN_LISTED and 3 * codes >= len(lines):
+        return True
+    pages = [
+        int(reference["page"])
         for line in lines
+        if (_LABELLED.match(line) or _NUMBERED.match(line))
+        and (reference := _PAGE_REFERENCE.search(line))
+    ]
+    return (
+        len(pages) >= MIN_LISTED
+        and 2 * len(pages) >= len(lines)
+        and pages == sorted(pages)  # "1. Lance de 45", "2. Lance de 70"... is a list, not contents
     )
-    return codes >= MIN_LISTED or (entries >= MIN_LISTED and 2 * entries >= len(lines))
 
 
-def detect_headings(
-    page_texts: list[str], skip: AbstractSet[int] = frozenset()
-) -> tuple[list[Section], set[int]]:
+def detect_headings(page_texts: list[str]) -> tuple[list[Section], set[int]]:
     """Sections found from the headings printed in the text, for a guide without a usable table
     of contents, and the pages that list fiches or headings with their page (contents pages,
-    printed in the guide even when the PDF has no usable one). Pages in `skip` are not read."""
+    printed in the guide even when the PDF has no usable one). Running headers and footers must
+    be removed first (`strip_repeated_lines`), or they read as a heading on every page."""
     found: list[tuple[int, str, int]] = []  # (level, title, page)
     listing: set[int] = set()
     for number, text in enumerate(page_texts, start=1):
-        if number in skip:
-            continue
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         if _is_contents(lines):
             listing.add(number)
             continue
+        # a fiche prints its own code; a page naming many (a table of illustrations) is no fiche
+        fiche = _codes(lines) < MIN_LISTED
         for i, line in enumerate(lines):
             following = lines[i + 1] if i + 1 < len(lines) else ""
             code, _, rest = line.partition(" ")
-            if _FICHE_CODE.match(code) and _title_like(rest.strip() or following):
-                # a family code (VEN-STR-PRO) sits above its fiches (VEN-STR-PRO-1); the title
-                # follows the code on its line or on the next one
-                found.append((2 + code.count("-"), f"{code} {rest.strip() or following}", number))
-            elif _TOP.match(line) or _SECTION.match(line):
+            if _FICHE_CODE.match(code):
+                title = rest.strip() or following
+                if fiche and _title_like(title) and not _FICHE_CODE.match(title.split()[0]):
+                    # a family code (VEN-STR-PRO) sits above its fiches (VEN-STR-PRO-1); the
+                    # title follows the code on its line or on the next one
+                    found.append((2 + code.count("-"), f"{code} {title}", number))
+            elif labelled := _LABELLED.match(line):
                 if _title_like(line):
-                    found.append((1 if _TOP.match(line) else 2, line, number))
+                    found.append((1 if labelled["top"] else 2, line, number))
             elif numbered := _NUMBERED.match(line):
                 title = numbered["title"] or following
                 depth = len([n for n in numbered["number"].split(".") if n])

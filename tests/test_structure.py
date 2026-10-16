@@ -111,11 +111,6 @@ def test_headings_give_a_structure_when_there_is_no_table_of_contents():
     )
 
 
-def test_pages_to_skip_are_not_read_for_headings():
-    sections, _ = detect_headings(FICHES, skip={2})
-    assert [s.page for s in sections] == [3]
-
-
 def test_a_printed_contents_page_in_ocr_text_gives_no_heading():
     contents = (
         "Sommaire\nCHAPITRE 1 - Connaissances générales 11\n1. Les biens culturels 11\n"
@@ -129,3 +124,13 @@ def test_a_printed_contents_page_in_ocr_text_gives_no_heading():
         ("CHAPITRE 1 - Connaissances générales", 2),
         ("1. Les biens culturels", 2),
     ]
+
+
+def test_sentences_and_lists_are_neither_headings_nor_contents():
+    lists = "Matériel :\n1. Lance de 45\n2. Lance de 70\n3. Tuyau de 110\n4. Division 65"
+    sentences = "Partie haute du local à ventiler\nAnnexe B\nLes fumées montent."
+    sections, listing = detect_headings([lists, sentences])
+    assert listing == set()  # page numbers of a contents only go up
+    assert [s.title for s in sections] == [
+        "1. Lance de 45", "2. Lance de 70", "3. Tuyau de 110", "4. Division 65", "Annexe B"
+    ]  # fmt: skip

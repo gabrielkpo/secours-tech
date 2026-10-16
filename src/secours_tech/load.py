@@ -13,7 +13,7 @@ import psycopg
 from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
 from secours_tech.extract import Page, extract_pages
-from secours_tech.ingest import Chunk, pages_to_chunks
+from secours_tech.ingest import Chunk, pages_to_chunks, strip_repeated_lines
 from secours_tech.structure import Section, detect_headings, locate, read_toc
 
 log = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ def read_source(path: Path, data: bytes) -> SourceDocument:
     sections, origin = tuple(locate(entries, texts, toc_pages)), "contents"
     if not sections:
         # no usable printed contents: the headings in the text, and the fiche listings as contents
-        found, toc_pages = detect_headings(texts)
+        found, toc_pages = detect_headings(strip_repeated_lines(texts))
         sections, origin = tuple(found), "headings"
     return SourceDocument(
         path.name, sha256_of(data), texts, pages, sections, frozenset(toc_pages), origin
