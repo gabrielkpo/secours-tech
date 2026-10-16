@@ -128,9 +128,13 @@ def test_a_printed_contents_page_in_ocr_text_gives_no_heading():
 
 def test_sentences_and_lists_are_neither_headings_nor_contents():
     lists = "Matériel :\n1. Lance de 45\n2. Lance de 70\n3. Tuyau de 110\n4. Division 65"
-    sentences = "Partie haute du local à ventiler\nAnnexe B\nLes fumées montent."
+    sentences = (
+        "Partie haute du local à ventiler\nPartie ci-dessous\nSection d'intervention\n"
+        "Annexe B\nSECTION I-CONNAISSANCE DU RISQUE\nLes fumées montent."
+    )
     sections, listing = detect_headings([lists, sentences])
     assert listing == set()  # page numbers of a contents only go up
     assert [s.title for s in sections] == [
-        "1. Lance de 45", "2. Lance de 70", "3. Tuyau de 110", "4. Division 65", "Annexe B"
+        "1. Lance de 45", "2. Lance de 70", "3. Tuyau de 110", "4. Division 65", "Annexe B",
+        "SECTION I-CONNAISSANCE DU RISQUE",
     ]  # fmt: skip

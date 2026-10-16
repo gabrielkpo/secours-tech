@@ -267,7 +267,7 @@ _PAGE_REFERENCE = re.compile(
 )  # "Titre 12", "Titre...12"
 # a chapter or section heading names its number or letter: "Partie haute du local" is a sentence
 _LABELLED = re.compile(
-    r"^(?:(?P<top>chapitre|annexe|partie|titre)|section)\s+(?:\d+|[IVXLC]+|[A-Z])\b",
+    r"^(?:(?P<top>chapitre|annexe|partie|titre)|section)\s+(?:\d+|(?-i:[IVXLC]+|[A-Z]))(?![\w'’])",
     re.IGNORECASE,
 )
 
