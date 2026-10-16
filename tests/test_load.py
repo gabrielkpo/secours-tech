@@ -205,3 +205,21 @@ def test_ocr_sample_can_exclude_pages_already_transcribed(conn):
     store_document(conn, SourceDocument("GTO-test.pdf", "a" * 64, [""] * 4, pages))
     drawn = sample(conn, per_guide=2, seed=1, exclude=frozenset({("GTO-test", 1), ("GTO-test", 2)}))
     assert drawn == {"GTO-test.pdf": [3, 4]}
+
+
+def test_reextract_replaces_text_chunks_and_routes_but_keeps_ocr_text(conn):
+    from secours_tech.load import reextract_document
+
+    garbled = (Page(1, "EFGH IJKL", "text_layer", 8, 0, 0, 1.0), Page(2, "", "ocr", 0, 30, 30, 1.0))
+    store_document(conn, SourceDocument("GDO-test.pdf", "a" * 64, ["EFGH IJKL", ""], garbled))
+    (doc_id,) = conn.execute("SELECT id FROM documents").fetchone()
+    conn.execute("UPDATE pages SET ocr_text = 'Ventiler le local.' WHERE page = 2")
+
+    fixed = (Page(1, "", "ocr", 8, 0, 0, 1.0), Page(2, "", "ocr", 0, 30, 30, 1.0))
+    assert (
+        reextract_document(conn, doc_id, SourceDocument("GDO-test.pdf", "a" * 64, ["", ""], fixed))
+        == 0
+    )
+    assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == 0
+    routes = conn.execute("SELECT page, route, ocr_text FROM pages ORDER BY page").fetchall()
+    assert routes == [(1, "ocr", None), (2, "ocr", "Ventiler le local.")]

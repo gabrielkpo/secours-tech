@@ -146,6 +146,46 @@ def store_document(
     return len(chunks)
 
 
+def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDocument) -> int:
+    """Replace a loaded document's chunks and page routes with a new extraction of the same file.
+
+    Used when the extraction itself changes (a garbled text layer now detected, accents mended).
+    OCR text already stored on a page is kept: a page newly routed to OCR has none yet and is
+    picked up by the next OCR run. Returns the number of chunks.
+    """
+    chunks = pages_to_chunks(doc.filename, doc.page_texts)
+    with conn.transaction():
+        conn.execute(
+            "DELETE FROM chunks WHERE document_id = %s AND extraction = 'text_layer'",
+            (document_id,),
+        )
+        start = conn.execute(
+            "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
+            (document_id,),
+        ).fetchone()[0]
+        with (
+            conn.cursor() as cur,
+            cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
+        ):
+            for position, chunk in enumerate(chunks, start=start):
+                copy.write_row((document_id, chunk.page, position, chunk.text))
+        for p in doc.pages:
+            conn.execute(
+                "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"
+                " quality = %s WHERE document_id = %s AND page = %s",
+                (p.route, p.letters, p.text_masks, p.images, p.quality, document_id, p.number),
+            )
+        conn.execute(
+            "UPDATE documents SET content_sha256 = %s, textless_page_count = %s WHERE id = %s",
+            (
+                doc.content_sha256,
+                len(doc.page_texts) - len({chunk.page for chunk in chunks}),
+                document_id,
+            ),
+        )
+    return len(chunks)
+
+
 def sync_with_manifest(conn: psycopg.Connection, entries: list[Entry]) -> tuple[int, int]:
     """Make the manifest decide which official guides are current.
 
@@ -174,6 +214,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--manifest", type=Path, default=MANIFEST, help="official sources (family, title, URL)"
     )
+    parser.add_argument(
+        "--reextract",
+        action="store_true",
+        help="extract the PDFs already loaded again (after a change to the extraction)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -195,7 +240,14 @@ def main(argv: list[str] | None = None) -> None:
             # check the fingerprint before parsing: a rerun skips loaded files without the
             # extraction cost
             if is_loaded(conn, sha):
-                log.info("%s: already loaded, skipped", pdf.name)
+                if not args.reextract:
+                    log.info("%s: already loaded, skipped", pdf.name)
+                    continue
+                (document_id,) = conn.execute(
+                    "SELECT id FROM documents WHERE sha256 = %s", (sha,)
+                ).fetchone()
+                count = reextract_document(conn, document_id, read_source(pdf, data))
+                log.info("%s: extracted again, %d chunks", pdf.name, count)
                 continue
             count = store_document(conn, read_source(pdf, data), official.get(sha))
             if count is None:
