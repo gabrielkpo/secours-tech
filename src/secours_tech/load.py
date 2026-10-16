@@ -14,7 +14,7 @@ from secours_tech.collect import MANIFEST, Entry, Manifest
 from secours_tech.db import connect, migrate
 from secours_tech.extract import Page, extract_pages
 from secours_tech.ingest import Chunk, pages_to_chunks
-from secours_tech.structure import Section, locate, read_toc
+from secours_tech.structure import Section, detect_headings, locate, read_toc
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class SourceDocument:
     pages: tuple[Page, ...] = ()  # per-page route and measures, when read from a PDF
     sections: tuple[Section, ...] = ()  # from the printed table of contents (D18)
     toc_pages: frozenset[int] = frozenset()  # the table of contents itself: no chunk
+    sections_origin: str = "contents"  # "contents" (printed) or "headings" (fallback of D18)
 
     @property
     def content_sha256(self) -> str:
@@ -71,10 +72,14 @@ def read_source(path: Path, data: bytes) -> SourceDocument:
     pages = tuple(extract_pages(path))
     texts = [page.text for page in pages]
     entries, toc_pages = read_toc(path)
-    sections = tuple(locate(entries, texts, toc_pages))
+    sections, origin = tuple(locate(entries, texts, toc_pages)), "contents"
     if not sections:
-        toc_pages = set()  # contents not trusted: its pages are kept like any other
-    return SourceDocument(path.name, sha256_of(data), texts, pages, sections, frozenset(toc_pages))
+        # no usable printed contents: the headings in the text, and the fiche listings as contents
+        found, toc_pages = detect_headings(texts)
+        sections, origin = tuple(found), "headings"
+    return SourceDocument(
+        path.name, sha256_of(data), texts, pages, sections, frozenset(toc_pages), origin
+    )
 
 
 def is_loaded(conn: psycopg.Connection, sha256: str) -> bool:
@@ -90,16 +95,24 @@ def _textless_pages(doc: SourceDocument, chunks: list[Chunk]) -> int:
 
 
 def insert_sections(
-    conn: psycopg.Connection, document_id: int, title: str, sections: Sequence[Section]
+    conn: psycopg.Connection,
+    document_id: int,
+    title: str,
+    sections: Sequence[Section],
+    origin: str = "contents",
 ) -> list[tuple[int, str]]:
     """Store a document's sections; returns (id, context "guide › … › section") per section."""
     rows = []
-    for ordinal, section in enumerate(sections):
+    (start,) = conn.execute(
+        "SELECT coalesce(max(ordinal) + 1, 0) FROM sections WHERE document_id = %s",
+        (document_id,),
+    ).fetchone()
+    for ordinal, section in enumerate(sections, start=start):
         path = " › ".join(section.path)
         (section_id,) = conn.execute(
-            "INSERT INTO sections (document_id, ordinal, level, title, path, page)"
-            " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-            (document_id, ordinal, section.level, section.title, path, section.page),
+            "INSERT INTO sections (document_id, ordinal, level, title, path, page, origin)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (document_id, ordinal, section.level, section.title, path, section.page, origin),
         ).fetchone()
         rows.append((section_id, f"{title} › {path}"))
     return rows
@@ -202,7 +215,7 @@ def store_document(
             ),
         ).fetchone()
         title = entry.title if entry else title_of(doc.filename)
-        sections = insert_sections(conn, row[0], title, doc.sections)
+        sections = insert_sections(conn, row[0], title, doc.sections, doc.sections_origin)
         copy_chunks(conn, row[0], chunks, sections=sections, title=title)
         if doc.pages:
             with (
@@ -235,11 +248,14 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             "DELETE FROM chunks WHERE document_id = %s AND extraction = 'text_layer'",
             (document_id,),
         )
-        conn.execute("DELETE FROM sections WHERE document_id = %s", (document_id,))
+        # OCR sections belong to `ocr_bench index`, which rebuilds them with the OCR chunks
+        conn.execute(
+            "DELETE FROM sections WHERE document_id = %s AND origin <> 'ocr'", (document_id,)
+        )
         (title,) = conn.execute(
             "SELECT title FROM documents WHERE id = %s", (document_id,)
         ).fetchone()
-        sections = insert_sections(conn, document_id, title, doc.sections)
+        sections = insert_sections(conn, document_id, title, doc.sections, doc.sections_origin)
         start = conn.execute(
             "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
             (document_id,),

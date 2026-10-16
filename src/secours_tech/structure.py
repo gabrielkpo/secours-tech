@@ -7,6 +7,11 @@ the numbering beside the title and the indentation), gives each a level, finds w
 heading starts in the PDF (printed numbers can be shifted from the PDF's own page count), and
 tells which pages are the table of contents itself, so they can be kept out of the search.
 
+A guide that prints no usable table of contents falls back on its headings (`detect_headings`):
+a fiche code line ("VEN-STR-PRO-1") with the title under it, "Chapitre"/"Section"/"Annexe"
+lines, and dotted numbering ("6.1. Choix du ventilateur", or "6.1." alone with the title on the
+next line).
+
 Level of a line, from the strongest clue to the weakest: "Chapitre"/"Annexe"/"Partie" is 1;
 "Section" is the level under it; a dotted numbering ("1.2.1") gives its depth; other lines take
 their rank of indentation. When a guide prints nothing usable, it simply has no sections.
@@ -16,6 +21,7 @@ import re
 import subprocess
 import unicodedata
 from collections import Counter
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -239,3 +245,81 @@ def split_page(text: str, page: int, sections: list[Section]) -> list[tuple[int 
         start, owner = at, index
     pieces.append((owner, "".join(lines[start:])))
     return [(owner, piece) for owner, piece in pieces if piece.strip()]
+
+
+_FICHE_CODE = re.compile(r"^[A-Z]{2,6}(?:-[A-Z0-9]{1,6}){2,}$")
+_NUMBERED = re.compile(r"^(?P<number>(?:\d{1,2}\.)+\d{0,2}\.?)\s*(?P<title>.*)$")
+MAX_HEADING = 100  # a longer line is a sentence, not a heading
+
+
+def _title_like(text: str) -> bool:
+    text = text.strip()
+    return (
+        2 < len(text) <= MAX_HEADING
+        and text[0].isupper()
+        and not text.endswith((";", ",", ":"))
+        and not re.search(r"(?:\.{3,}|_{3,})\s*\d+$", text)  # a contents line, not a heading
+    )
+
+
+MIN_LISTED = 4  # a table of contents: a page naming this many fiche codes, or this many headings
+# with their page number making up most of its lines; its lines are not headings, it gives no chunk
+_PAGE_REFERENCE = re.compile(r"\D(?:\s|\.{2,}|…|_{2,})+\d{1,3}$")  # "Titre 12", "Titre...12"
+
+
+def _is_contents(lines: list[str]) -> bool:
+    codes = sum(bool(_FICHE_CODE.match(line.split()[0])) for line in lines)
+    entries = sum(
+        bool(_TOP.match(line) or _SECTION.match(line) or _NUMBERED.match(line))
+        and bool(_PAGE_REFERENCE.search(line))
+        for line in lines
+    )
+    return codes >= MIN_LISTED or (entries >= MIN_LISTED and 2 * entries >= len(lines))
+
+
+def detect_headings(
+    page_texts: list[str], skip: AbstractSet[int] = frozenset()
+) -> tuple[list[Section], set[int]]:
+    """Sections found from the headings printed in the text, for a guide without a usable table
+    of contents, and the pages that list fiches or headings with their page (contents pages,
+    printed in the guide even when the PDF has no usable one). Pages in `skip` are not read."""
+    found: list[tuple[int, str, int]] = []  # (level, title, page)
+    listing: set[int] = set()
+    for number, text in enumerate(page_texts, start=1):
+        if number in skip:
+            continue
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if _is_contents(lines):
+            listing.add(number)
+            continue
+        for i, line in enumerate(lines):
+            following = lines[i + 1] if i + 1 < len(lines) else ""
+            code, _, rest = line.partition(" ")
+            if _FICHE_CODE.match(code) and _title_like(rest.strip() or following):
+                # a family code (VEN-STR-PRO) sits above its fiches (VEN-STR-PRO-1); the title
+                # follows the code on its line or on the next one
+                found.append((2 + code.count("-"), f"{code} {rest.strip() or following}", number))
+            elif _TOP.match(line) or _SECTION.match(line):
+                if _title_like(line):
+                    found.append((1 if _TOP.match(line) else 2, line, number))
+            elif numbered := _NUMBERED.match(line):
+                title = numbered["title"] or following
+                depth = len([n for n in numbered["number"].split(".") if n])
+                if _title_like(title):
+                    label = (
+                        f"{numbered['number']} {title}" if numbered["title"] else f"{line} {title}"
+                    )
+                    found.append((10 + depth, " ".join(label.split()), number))
+    if not found:
+        return [], listing
+    # levels: chapters, sections, fiche families then fiches, then numbering; renumbered from 1
+    ranks = {level: rank for rank, level in enumerate(sorted({level for level, _, _ in found}), 1)}
+    sections: list[Section] = []
+    stack: list[tuple[int, str]] = []
+    for level, title, page in found:
+        level = ranks[level]
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+        stack.append((level, title))
+        sections.append(Section(title, level, page, tuple(t for _, t in stack)))
+    return sections, listing

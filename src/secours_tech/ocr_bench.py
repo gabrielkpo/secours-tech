@@ -24,8 +24,8 @@ from pathlib import Path
 from secours_tech.db import connect
 from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
 from secours_tech.ingest import Chunk, chunk_text, strip_repeated_lines
-from secours_tech.load import copy_chunks, renumber_chunks
-from secours_tech.structure import section_at
+from secours_tech.load import copy_chunks, insert_sections, renumber_chunks
+from secours_tech.structure import Section, detect_headings, split_page
 
 REFERENCES = Path("data/ocr-reference")
 SAMPLES = (REFERENCES, REFERENCES / "validation")  # tuning sample, then held-out validation
@@ -208,6 +208,9 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             conn.execute(
                 "DELETE FROM chunks WHERE document_id = %s AND extraction = 'ocr'", (document_id,)
             )
+            conn.execute(
+                "DELETE FROM sections WHERE document_id = %s AND origin = 'ocr'", (document_id,)
+            )
             guide = guides.get(filename)
             if guide is None or not guide.passed:
                 continue
@@ -231,23 +234,21 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             (title,) = conn.execute(
                 "SELECT title FROM documents WHERE id = %s", (document_id,)
             ).fetchone()
-            rows = conn.execute(
-                "SELECT id, page, path FROM sections WHERE document_id = %s ORDER BY ordinal",
-                (document_id,),
-            ).fetchall()
-            sections = [(section_id, f"{title} › {path}") for section_id, _, path in rows]
-
-            # OCR text is not cut at headings: a page goes to the section open at its top
-            starts = [start for _, start, _ in rows]
+            sections, tree = _ocr_sections(conn, document_id, title, texts, pages)
+            contents = {
+                page
+                for (page,) in conn.execute(
+                    "SELECT page FROM pages WHERE document_id = %s AND is_toc", (document_id,)
+                ).fetchall()
+            }
+            # each OCR page is cut where its headings are printed, like a text page; a table of
+            # contents gives no chunk
             chunks = [
-                Chunk(
-                    filename,
-                    page,
-                    piece,
-                    section_at(starts, page),
-                )
+                Chunk(filename, page, part, owner)
                 for page in pages
-                for piece in chunk_text(texts.get(page, ""))
+                if page not in contents
+                for owner, piece in split_page(texts.get(page, ""), page, tree)
+                for part in chunk_text(piece)
             ]
             (start,) = conn.execute(
                 "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
@@ -257,6 +258,38 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             renumber_chunks(conn, document_id)
             written[filename] = len(chunks)
     return written
+
+
+def _ocr_sections(
+    conn, document_id: int, title: str, texts: dict[int, str], pages: list[int]
+) -> tuple[list[tuple[int, str]], list[Section]]:
+    """Sections for a guide's OCR chunks: the ones the loader stored (printed contents or
+    headings of the text layer) when there are any, otherwise the headings of the OCR text,
+    stored as origin 'ocr', its contents pages marked `is_toc`. Returns (id, context) per
+    section and the sections."""
+    query = (
+        "SELECT id, title, level, page, path FROM sections WHERE document_id = %s ORDER BY ordinal"
+    )
+    rows = conn.execute(query, (document_id,)).fetchall()
+    if not rows:
+        read = set(pages)
+        last = max(read, default=0)
+        found, listing = detect_headings(
+            [texts.get(page, "") if page in read else "" for page in range(1, last + 1)]
+        )
+        insert_sections(conn, document_id, title, found, origin="ocr")
+        # the OCR text decides which of its pages are contents, at every run
+        conn.execute(
+            "UPDATE pages SET is_toc = (page = ANY(%s)) WHERE document_id = %s AND page = ANY(%s)",
+            (sorted(listing), document_id, sorted(read)),
+        )
+        rows = conn.execute(query, (document_id,)).fetchall()
+    ids = [(section_id, f"{title} › {path}") for section_id, _, _, _, path in rows]
+    sections = [
+        Section(heading, level, page, tuple(path.split(" › ")))
+        for _, heading, level, page, path in rows
+    ]
+    return ids, sections
 
 
 def write_record(

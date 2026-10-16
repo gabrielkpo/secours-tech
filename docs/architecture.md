@@ -34,9 +34,17 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   are mostly not found (a garbled one). Each page is cut where its headings are printed, so no
   chunk straddles two sections; each chunk gets its `section_id` and its `context`; the table
   of contents pages give no chunk. On the 28 guides: 12 have a usable table of contents (1,426
-  sections, 44 contents pages left out) and 88.5 % of the chunks have a section. The guides
-  without one (ventilation, the PSE flowcharts, the OCR guides) wait for the fallback of D18,
-  heading detection.
+  sections, 44 contents pages left out) and 88.5 % of the chunks have a section. A guide
+  without a usable table of contents falls back on its headings (`detect_headings`): fiche
+  codes (`VEN-STR-PRO-1`, the family code above its fiches), chapter and section labels, and
+  dotted numbering, a number alone on its line taking the next line as its title. A page that
+  names four fiche codes, or whose lines are mostly headings followed by their page number, is
+  a printed table of contents: it gives neither headings nor chunks. Each section records its
+  `origin`: `contents`, `headings` (text layer, at load time) or `ocr`. The OCR guides have no
+  text layer to read at load time, so `ocr_bench index` detects their headings on the OCR text
+  of a guide that passes, stores them as `ocr` (replaced at each run, kept by `--reextract`) and
+  cuts the OCR pages at those headings like text pages. Ventilation gets 162 sections this
+  way; the PSE flowcharts have no headings and stay without.
 - **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
   effect of OCR on retrieval and citations can be measured.
 - **Each page is routed, not guessed.** `pdftotext` (poppler) reads the text layer; `pdfimages`

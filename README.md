@@ -138,7 +138,7 @@ uv run pytest                              # set TEST_DATABASE_URL to run the da
 
 The loader applies the SQL migrations, then stores each PDF in `documents` (SHA-256, page count,
 pages without text), its pages with their route, its sections read from the printed table of
-contents, and its chunks in `chunks` (page, text, section and context, extraction method,
+contents (or, without one, from its headings), and its chunks in `chunks` (page, text, section and context, extraction method,
 full-text vector). Running it twice changes nothing; after a change to the extraction or the
 structure, `load data/raw --reextract` applies it to the guides already loaded. `ocr_bench index`
 needs the hand transcriptions in `data/ocr-reference/` (kept out of Git) and writes its decision
