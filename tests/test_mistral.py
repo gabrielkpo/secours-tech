@@ -52,3 +52,17 @@ def test_post_retries_on_rate_limit_and_never_echoes_the_key(monkeypatch):
     with pytest.raises(MistralError) as error:
         post("ocr", {}, "secret-key")
     assert "401" in str(error.value) and "secret-key" not in str(error.value)
+
+
+def test_post_retries_network_errors_then_reports_them(monkeypatch):
+    attempts = []
+
+    def offline(request, timeout):
+        attempts.append(1)
+        raise urllib.error.URLError("timed out")
+
+    monkeypatch.setattr(mistral.urllib.request, "urlopen", offline)
+    monkeypatch.setattr(mistral.time, "sleep", lambda s: None)
+    with pytest.raises(MistralError, match="network error"):
+        post("ocr", {}, "k")
+    assert len(attempts) == mistral.RETRIES

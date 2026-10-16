@@ -32,7 +32,7 @@ def api_key(env_file: Path = Path(".env")) -> str:
 
 
 def post(path: str, payload: dict, key: str, timeout: int = 120) -> dict:
-    """POST JSON to the API; waits and retries when the rate limit (429) or a 5xx is hit."""
+    """POST JSON to the API; waits and retries on the rate limit (429), a 5xx or a network error."""
     request = urllib.request.Request(
         f"{API}/{path}",
         data=json.dumps(payload).encode(),
@@ -49,4 +49,9 @@ def post(path: str, payload: dict, key: str, timeout: int = 120) -> dict:
                 continue
             # the body explains the refusal; the request (and its key) is never echoed
             raise MistralError(f"{path}: HTTP {error.code} {error.read()[:300]!r}") from None
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            if attempt < RETRIES - 1:
+                time.sleep(2 ** (attempt + 1))
+                continue
+            raise MistralError(f"{path}: network error {error}") from None
     raise MistralError(f"{path}: no answer after {RETRIES} attempts")

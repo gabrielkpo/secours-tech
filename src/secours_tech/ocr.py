@@ -254,7 +254,10 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     if args.engine == "mistral":
-        key = api_key()
+        try:
+            key = api_key()
+        except MistralError as error:
+            raise SystemExit(str(error)) from None
         engine = MISTRAL_ENGINE
 
         def read(pdf: Path, page: int) -> OcrResult:
