@@ -80,16 +80,38 @@ def _textless_pages(doc: SourceDocument, chunks: list[Chunk]) -> int:
     return len(doc.page_texts) - len({chunk.page for chunk in chunks})
 
 
-def _copy_chunks(
-    conn: psycopg.Connection, document_id: int, chunks: list[Chunk], start: int = 0
+def copy_chunks(
+    conn: psycopg.Connection,
+    document_id: int,
+    chunks: list[Chunk],
+    start: int = 0,
+    extraction: str = "text_layer",
 ) -> None:
     # COPY streams all rows in one round trip: thousands of chunks load in about a second
     with (
         conn.cursor() as cur,
-        cur.copy("COPY chunks (document_id, page, position, text) FROM STDIN") as copy,
+        cur.copy("COPY chunks (document_id, page, position, text, extraction) FROM STDIN") as copy,
     ):
         for position, chunk in enumerate(chunks, start=start):
-            copy.write_row((document_id, chunk.page, position, chunk.text))
+            copy.write_row((document_id, chunk.page, position, chunk.text, extraction))
+
+
+def renumber_chunks(conn: psycopg.Connection, document_id: int) -> None:
+    """Make `position` follow the reading order again (page, then order on the page) after chunks
+    of another extraction were added. Two steps, so the unique (document, position) never clashes.
+    """
+    conn.execute(
+        "UPDATE chunks SET position = position + 1000000 WHERE document_id = %s", (document_id,)
+    )
+    conn.execute(
+        """
+        UPDATE chunks c SET position = r.n FROM (
+            SELECT id, row_number() OVER (ORDER BY page, position) - 1 AS n
+            FROM chunks WHERE document_id = %s
+        ) r WHERE c.id = r.id
+        """,
+        (document_id,),
+    )
 
 
 def store_document(
@@ -140,7 +162,7 @@ def store_document(
                 textless,
             ),
         ).fetchone()
-        _copy_chunks(conn, row[0], chunks)
+        copy_chunks(conn, row[0], chunks)
         if doc.pages:
             with (
                 conn.cursor() as cur,
@@ -173,7 +195,8 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
             (document_id,),
         ).fetchone()[0]
-        _copy_chunks(conn, document_id, chunks, start)
+        copy_chunks(conn, document_id, chunks, start)
+        renumber_chunks(conn, document_id)
         for p in doc.pages:
             conn.execute(
                 "UPDATE pages SET route = %s, letters = %s, text_masks = %s, images = %s,"

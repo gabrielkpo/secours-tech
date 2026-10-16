@@ -205,6 +205,14 @@ def main(argv: list[str] | None = None) -> None:
             log.warning("%d document(s) not found in %s, skipped", len(missing), args.corpus)
         jobs = [(doc, page, paths[sha]) for doc, sha, _, page in todo if sha in paths]
         log.info("%d page(s) to read", len(jobs))
+        # indexed OCR text was checked against the text being replaced: it goes until
+        # `ocr_bench index` checks the new text again
+        stale = conn.execute(
+            "DELETE FROM chunks WHERE extraction = 'ocr' AND document_id = ANY(%s)",
+            (sorted({doc for doc, _, _ in jobs}),),
+        ).rowcount
+        if stale:
+            log.warning("%d indexed OCR chunk(s) withdrawn: run ocr_bench index again", stale)
 
         def work(job):
             doc, page, pdf = job
