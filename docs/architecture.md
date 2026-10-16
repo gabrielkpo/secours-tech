@@ -15,8 +15,12 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Citation check by equality.** Every quoted passage in an answer must appear verbatim in the
   retrieved chunks, otherwise the answer is blocked.
 - **Documents are not in Git.** They are downloaded by a script into `data/raw/`.
-- **Evaluation first.** Expected answers are written before running the system and are never
-  shown to the model.
+- **Evaluation first.** Expected answers are written before running the system and are never shown
+  to the model. Claude drafts them from the guide pages (PDFs read directly, not through the
+  system under test), with a verbatim excerpt and its page for every fact, checked by a script
+  against the page text (versioned with the evaluation harness of J2); the firefighter reviewing
+  them (the author) validates, corrects or rejects each case, and only validated or corrected
+  cases are kept.
 - **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
   evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.
