@@ -1,8 +1,13 @@
 """OCR of the pages routed to `ocr`, with Tesseract and its French model.
 
-Pages are rendered at 300 dpi with `pdftoppm`, read by Tesseract (LSTM engine, `fra` model
-from tessdata_best pinned to one commit and checked by SHA-256), and the text and the mean word
-confidence are stored on the page row. OCR text is not indexed here: a guide's OCR text is only
+Each page is copied with its pictures removed: the ministry's Word exports draw every line of
+text as a tiny solid image carrying a 1-bit mask, while photos, drawings and box backgrounds are
+ordinary images. Only the text is left (grey boxes no longer hide their text, drawings no longer
+read as gibberish). The copy is rendered at 600 dpi with `pdftoppm` and read by Tesseract (LSTM
+engine, Sauvola binarisation, `fra` model from tessdata_best pinned to one commit and checked by
+SHA-256). Text and mean word confidence are stored on the page row; a page read with other
+settings is read again. Settings chosen on a hand-checked sample and validated on another one
+(`secours_tech.ocr_bench`). OCR text is not indexed here: a guide's OCR text is only
 used once its sample passes the reliability check (`secours_tech.ocr_bench`).
 """
 
@@ -18,6 +23,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
+import pikepdf
+
 from secours_tech.db import connect, migrate
 
 log = logging.getLogger(__name__)
@@ -28,7 +35,8 @@ MODEL_URL = (
     f"https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/{MODEL_COMMIT}/fra.traineddata"
 )
 MODEL_SHA256 = "907743d98915c91a3906dfbf6e48b97598346698fe53aaa797e1a064ffcac913"
-DPI = 300
+DPI = 600
+SETTINGS = "text-only 600dpi sauvola"  # stored with the text: a change of settings re-reads pages
 
 
 @dataclass(frozen=True)
@@ -55,7 +63,7 @@ def engine_version() -> str:
     first_line = subprocess.run(
         ["tesseract", "--version"], check=True, capture_output=True, text=True
     ).stdout.splitlines()[0]
-    return f"{first_line} fra best {MODEL_COMMIT[:7]}"
+    return f"{first_line} fra best {MODEL_COMMIT[:7]} {SETTINGS}"
 
 
 def text_from_tsv(tsv: str) -> OcrResult:
@@ -76,12 +84,51 @@ def text_from_tsv(tsv: str) -> OcrResult:
     return OcrResult(text, round(confidence, 1))
 
 
+def _is_text_mask(image) -> bool:
+    """A line of text drawn as an image: a few pixels of colour cut out by a 1-bit mask."""
+    small = int(image.get("/Width", 0)) <= 4 and int(image.get("/Height", 0)) <= 4
+    return small and ("/SMask" in image or bool(image.get("/ImageMask", False)))
+
+
+def _drop_pictures(pdf: pikepdf.Pdf, owner) -> None:
+    """Remove the drawing of every image that is not a text mask, in a page or a form XObject."""
+    dictionary = owner.obj if isinstance(owner, pikepdf.Page) else owner
+    xobjects = dictionary.get("/Resources", {}).get("/XObject", {})
+    pictures = set()
+    for name, xobject in xobjects.items():
+        if xobject.get("/Subtype") == "/Form":
+            _drop_pictures(pdf, xobject)
+        elif xobject.get("/Subtype") == "/Image" and not _is_text_mask(xobject):
+            pictures.add(str(name))
+    if not pictures:
+        return
+    kept = [
+        (operands, operator)
+        for operands, operator in pikepdf.parse_content_stream(owner)
+        if not (str(operator) == "Do" and str(operands[0]) in pictures)
+    ]
+    stream = pikepdf.unparse_content_stream(kept)
+    if isinstance(owner, pikepdf.Page):
+        owner.obj.Contents = pdf.make_stream(stream)  # one stream, even if the page had several
+    else:
+        owner.write(stream)
+
+
+def text_only_copy(pdf: Path, page: int, target: Path) -> None:
+    """Write `page` of `pdf` alone to `target`, without its pictures."""
+    with pikepdf.open(pdf) as source, pikepdf.new() as copy:
+        copy.pages.append(source.pages[page - 1])
+        _drop_pictures(copy, copy.pages[0])
+        copy.save(target)
+
+
 def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
     with tempfile.TemporaryDirectory() as tmp:
         image = Path(tmp) / "page"
+        single = Path(tmp) / "page.pdf"
+        text_only_copy(pdf.resolve(), page, single)
         subprocess.run(
-            ["pdftoppm", "-f", str(page), "-l", str(page), "-r", str(DPI), "-gray", "-png",
-             "-singlefile", str(pdf.resolve()), str(image)],
+            ["pdftoppm", "-r", str(DPI), "-gray", "-png", "-singlefile", str(single), str(image)],
             check=True,
             capture_output=True,
         )  # fmt: skip
@@ -96,6 +143,10 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
                 "1",
                 "--psm",
                 "3",
+                "--dpi",
+                str(DPI),
+                "-c",
+                "thresholding_method=2",  # Sauvola: local thresholds, robust to shaded boxes
                 # TSV output set directly: the "tsv" config file lives in the system tessdata,
                 # not in our model folder
                 "-c",
@@ -136,8 +187,9 @@ def main(argv: list[str] | None = None) -> None:
         todo = conn.execute(
             "SELECT d.id, d.sha256, d.title, p.page FROM pages p"
             " JOIN documents d ON d.id = p.document_id"
-            " WHERE p.route = 'ocr' AND p.ocr_text IS NULL AND d.retired_at IS NULL"
-            " ORDER BY d.id, p.page"
+            " WHERE p.route = 'ocr' AND p.ocr_engine IS DISTINCT FROM %s"
+            " AND d.retired_at IS NULL ORDER BY d.id, p.page",
+            (engine,),
         ).fetchall()
         missing = {sha for _, sha, _, _ in todo if sha not in paths}
         if missing:
