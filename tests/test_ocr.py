@@ -87,3 +87,13 @@ def test_normalize_drops_table_of_contents_leaders_and_joins_cut_words():
     )
     assert normalize("les sapeurs-\npompiers") == "les sapeurs-pompiers"
     assert normalize("✓ la police nationale") == "la police nationale"
+
+
+def test_transcriptions_skip_files_that_are_not_a_page(tmp_path: Path):
+    from secours_tech.ocr_bench import transcriptions
+
+    guide = tmp_path / "GTO-test"
+    guide.mkdir()
+    for name in ("p12.txt", "img-p12.txt", "photo-notes.txt", "p3.png"):
+        (guide / name).write_text("x")
+    assert transcriptions(tmp_path) == [(guide / "p12.txt", "GTO-test", 12)]

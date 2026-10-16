@@ -106,6 +106,19 @@ class GuideScore:
         return bool(self.pages) and self.numbers_exact and self.cer <= MAX_CER
 
 
+_TRANSCRIPTION = re.compile(r"p(\d+)\.txt")
+
+
+def transcriptions(folder: Path) -> list[tuple[Path, str, int]]:
+    """Hand transcriptions in a sample folder: (file, pdf stem, page), from `<stem>/p<page>.txt`."""
+    found = []
+    for path in sorted(folder.glob("*/p*.txt")):
+        match = _TRANSCRIPTION.fullmatch(path.name)
+        if match:
+            found.append((path, path.parent.name, int(match.group(1))))
+    return found
+
+
 def sample(
     conn, per_guide: int, seed: int, exclude: frozenset[tuple[str, int]] = frozenset()
 ) -> dict[str, list[int]]:
@@ -160,7 +173,9 @@ def main(argv: list[str] | None = None) -> None:
     draw.add_argument(
         "--exclude",
         type=Path,
-        help="folder of an earlier sample: its transcribed pages are not drawn again",
+        action="append",
+        default=[],
+        help="folder of an earlier sample, whose transcribed pages are not drawn again (repeatable)",
     )
     score = sub.add_parser("score", help="score the OCR text against the transcriptions")
     score.add_argument(
@@ -174,8 +189,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.command == "sample":
             pdfs = {p.name: p for p in args.corpus.rglob("*.pdf")}
             exclude = frozenset(
-                (p.parent.name, int(p.stem[1:])) for p in args.exclude.glob("*/p*.txt")
-            ) if args.exclude else frozenset()  # fmt: skip
+                (stem, page) for folder in args.exclude for _, stem, page in transcriptions(folder)
+            )
             for filename, pages in sample(conn, args.per_guide, args.seed, exclude).items():
                 folder = args.references / Path(filename).stem
                 folder.mkdir(parents=True, exist_ok=True)
@@ -191,9 +206,8 @@ def main(argv: list[str] | None = None) -> None:
 
         guides: dict[str, GuideScore] = {}
         ocr_by_guide: dict[str, dict[int, str]] = {}
-        for reference in sorted(args.references.glob("*/p*.txt")):
-            page = int(reference.stem[1:])
-            filename = f"{reference.parent.name}.pdf"
+        for reference, stem, page in transcriptions(args.references):
+            filename = f"{stem}.pdf"
             if filename not in ocr_by_guide:
                 ocr_by_guide[filename] = ocr_pages(conn, filename)
             ocr = ocr_by_guide[filename].get(page)
