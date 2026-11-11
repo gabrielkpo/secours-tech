@@ -383,13 +383,15 @@ def main(argv: list[str] | None = None) -> None:
         else:
             from secours_tech.embed import EMBEDDERS, missing_inputs
 
-            embedder = EMBEDDERS[args.model]()
-            # a chunk without a vector is invisible to the vector search: scores would be biased
-            if missing := len(missing_inputs(conn, embedder.name)):
+            model = EMBEDDERS[args.model]
+            # a chunk without a vector is invisible to the vector search: scores would be biased;
+            # checked before the model is loaded
+            if missing := len(missing_inputs(conn, model.name)):
                 raise SystemExit(
-                    f"{missing} chunk inputs have no {embedder.name} vector: "
+                    f"{missing} chunk inputs have no {model.name} vector: "
                     f"run `python -m secours_tech.embed --model {args.model}` first"
                 )
+            embedder = model()
             retriever = (vector if args.retriever == "vector" else hybrid)(conn, embedder)
         scores = evaluate(chosen, retriever, args.k)
         for group in ["all", *CATEGORIES]:
