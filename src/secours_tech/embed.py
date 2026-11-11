@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 
 MISTRAL_MODEL = "mistral-embed-2312"  # pinned: the alias "mistral-embed" may move
 E5_MODEL = "intfloat/multilingual-e5-base"
+E5_REVISION = "d128750597153bb5987e10b1c3493a34e5a4502a"  # pinned commit (Hugging Face)
 BATCH = 32  # ~32 x 250 tokens per request, well under the API limit
 
 
@@ -64,8 +65,11 @@ class E5Embedder:
         except ImportError:
             raise SystemExit("e5 needs the local extra: uv sync --extra local") from None
         self.torch = torch
-        self.tokenizer = AutoTokenizer.from_pretrained(E5_MODEL)
-        self.model = AutoModel.from_pretrained(E5_MODEL).eval()
+        # pinned revision, safetensors weights only (no pickle), no remote code
+        self.tokenizer = AutoTokenizer.from_pretrained(E5_MODEL, revision=E5_REVISION)
+        self.model = AutoModel.from_pretrained(
+            E5_MODEL, revision=E5_REVISION, use_safetensors=True
+        ).eval()
 
     def _embed(self, texts: Sequence[str]) -> list[list[float]]:
         torch = self.torch

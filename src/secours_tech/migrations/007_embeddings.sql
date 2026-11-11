@@ -27,3 +27,6 @@ CREATE TABLE embeddings (
     created_at   timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (model, input_sha256)
 );
+
+-- The vector column planned in 001 is replaced by this table (vectors per model and per input).
+ALTER TABLE chunks DROP COLUMN embedding;

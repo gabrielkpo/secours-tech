@@ -77,3 +77,28 @@ def test_mistral_embeddings_come_back_in_input_order(monkeypatch):
 
 def test_vectors_are_written_in_pgvector_text_form():
     assert as_vector([1, 0.5]) == "[1.0,0.5]"
+
+
+def test_the_bench_refuses_vector_scores_when_chunks_lack_a_vector(conn, tmp_path, monkeypatch):
+    import os
+
+    import pytest
+
+    from secours_tech.bench import main
+
+    _guide(conn)
+    cases = tmp_path / "cases"
+    cases.mkdir()
+    (cases / "Q01.toml").write_text(
+        'id = "Q01"\ncategory = "simple"\nsplit = "dev"\nquestion = "Gaz ?"\n'
+        'expected_answer = "Couper."\nserious_fault_if = "rien"\n\n[[excerpts]]\n'
+        'document = "GDO-test.pdf"\npage = 2\ntext = "Couper le gaz"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(embed.EMBEDDERS, "mistral", FakeEmbedder)
+    monkeypatch.setenv("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
+    argv = ["--cases", str(cases), "--fingerprint", str(tmp_path / "none"), "run", "--retriever"]
+    with pytest.raises(SystemExit, match="have no fake vector"):
+        main([*argv, "vector"])
+    embed_corpus(conn, FakeEmbedder())
+    main([*argv, "hybrid"])  # every chunk has its vector: the run goes through
