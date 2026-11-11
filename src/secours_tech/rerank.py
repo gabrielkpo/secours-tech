@@ -12,6 +12,7 @@ BGE-M3 only publishes pickle weights: they are loaded with torch's `weights_only
 which accepts tensors and nothing else.
 """
 
+import os
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -74,6 +75,9 @@ class MultiVector:
     name = f"{BGE_M3} multi-vector"
 
     def __init__(self):
+        # the pinned revision has no safetensors file: without this, transformers starts a
+        # background request asking the Hub to convert the third-party repository
+        os.environ.setdefault("DISABLE_SAFETENSORS_CONVERSION", "1")
         self.torch, transformers = _local()
         from huggingface_hub import hf_hub_download
 

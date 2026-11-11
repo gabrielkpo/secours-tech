@@ -34,6 +34,7 @@ SPLITS = ("dev", "test")
 TEST_SHARE = 0.3  # scoping §6.1: about 30 % of the cases are kept for one final run
 SEED = 11112026
 RRF_K = 60  # the usual constant of reciprocal rank fusion
+CANDIDATES = 50  # chunks a first stage hands to scoring or to a reranker
 REQUIRED = ("id", "category", "split", "question", "expected_answer", "serious_fault_if")
 
 Retriever = Callable[[str], Sequence[tuple[str, int]]]  # question -> ranked (document, page)
@@ -298,17 +299,17 @@ def _pages(candidates: Callable[[str], Sequence[tuple[int, str, int]]]) -> Retri
     return lambda question: [(d, p) for _, d, p in candidates(question)]
 
 
-def fulltext(conn, limit: int = 50) -> Retriever:
+def fulltext(conn, limit: int = CANDIDATES) -> Retriever:
     """Baseline: Postgres French full text over the chunks of the current guides, any word of
     the question (OR), ranked by ts_rank_cd."""
     return _pages(lambda question: _fulltext_chunks(conn, question, limit))
 
 
-def vector(conn, embedder, limit: int = 50) -> Retriever:
+def vector(conn, embedder, limit: int = CANDIDATES) -> Retriever:
     return _pages(lambda question: _vector_chunks(conn, embedder, question, limit))
 
 
-def hybrid(conn, embedder, limit: int = 50) -> Retriever:
+def hybrid(conn, embedder, limit: int = CANDIDATES) -> Retriever:
     return _pages(lambda question: _hybrid_chunks(conn, embedder, question, limit))
 
 
@@ -421,9 +422,9 @@ def main(argv: list[str] | None = None) -> None:
                 )
             embedder = model()
         candidates = {
-            "fulltext": lambda question: _fulltext_chunks(conn, question, 50),
-            "vector": lambda question: _vector_chunks(conn, embedder, question, 50),
-            "hybrid": lambda question: _hybrid_chunks(conn, embedder, question, 50),
+            "fulltext": lambda question: _fulltext_chunks(conn, question, CANDIDATES),
+            "vector": lambda question: _vector_chunks(conn, embedder, question, CANDIDATES),
+            "hybrid": lambda question: _hybrid_chunks(conn, embedder, question, CANDIDATES),
         }[args.retriever]
         if args.rerank == "none":
             retriever = _pages(candidates)
