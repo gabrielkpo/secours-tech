@@ -32,6 +32,7 @@ CATEGORIES = ("simple", "complex", "function", "out_of_scope", "trap", "medical"
 SPLITS = ("dev", "test")
 TEST_SHARE = 0.3  # scoping §6.1: about 30 % of the cases are kept for one final run
 SEED = 11112026
+RRF_K = 60  # the usual constant of reciprocal rank fusion
 REQUIRED = ("id", "category", "split", "question", "expected_answer", "serious_fault_if")
 
 Retriever = Callable[[str], Sequence[tuple[str, int]]]  # question -> ranked (document, page)
@@ -236,26 +237,72 @@ def evaluate(
     return {group: {"n": len(r), **summarize(r, ks)} for group, r in ranks.items()}
 
 
+def _fulltext_chunks(conn, question: str, limit: int) -> list[tuple[int, str, int]]:
+    """(chunk id, document, page) by French full text, any word of the question (OR)."""
+    words = re.findall(r"\w+", question)
+    if not words:
+        return []
+    return conn.execute(
+        """
+        SELECT c.id, d.filename, c.page
+        FROM chunks c JOIN documents d ON d.id = c.document_id,
+             websearch_to_tsquery('fr', %s) q
+        WHERE d.retired_at IS NULL AND c.tsv @@ q
+        ORDER BY ts_rank_cd(c.tsv, q) DESC, c.id
+        LIMIT %s
+        """,
+        (" or ".join(words), limit),
+    ).fetchall()
+
+
+def _vector_chunks(conn, embedder, question: str, limit: int) -> list[tuple[int, str, int]]:
+    """(chunk id, document, page) by cosine distance to the question's embedding."""
+    from secours_tech.embed import as_vector
+
+    return conn.execute(
+        """
+        SELECT c.id, d.filename, c.page
+        FROM chunks c JOIN documents d ON d.id = c.document_id
+             JOIN embeddings e ON e.model = %s AND e.input_sha256 = c.input_sha256
+        WHERE d.retired_at IS NULL
+        ORDER BY e.embedding <=> %s::vector, c.id
+        LIMIT %s
+        """,
+        (embedder.name, as_vector(embedder.query(question)), limit),
+    ).fetchall()
+
+
+def rrf(*rankings: Sequence[tuple[int, str, int]], k: int = RRF_K) -> list[tuple[int, str, int]]:
+    """Reciprocal rank fusion: each chunk scores the sum of 1 / (k + rank) over the rankings
+    it appears in (D10). Ties keep the order of the first ranking."""
+    scores: dict[int, float] = {}
+    rows: dict[int, tuple[int, str, int]] = {}
+    for ranking in rankings:
+        for rank, row in enumerate(ranking, start=1):
+            scores[row[0]] = scores.get(row[0], 0.0) + 1 / (k + rank)
+            rows.setdefault(row[0], row)
+    return sorted(rows.values(), key=lambda row: -scores[row[0]])
+
+
 def fulltext(conn, limit: int = 50) -> Retriever:
     """Baseline: Postgres French full text over the chunks of the current guides, any word of
     the question (OR), ranked by ts_rank_cd."""
+    return lambda question: [(d, p) for _, d, p in _fulltext_chunks(conn, question, limit)]
+
+
+def vector(conn, embedder, limit: int = 50) -> Retriever:
+    return lambda question: [(d, p) for _, d, p in _vector_chunks(conn, embedder, question, limit)]
+
+
+def hybrid(conn, embedder, limit: int = 50) -> Retriever:
+    """Full text and vectors fused by reciprocal rank (D10)."""
 
     def retrieve(question: str) -> list[tuple[str, int]]:
-        words = re.findall(r"\w+", question)
-        if not words:
-            return []
-        rows = conn.execute(
-            """
-            SELECT d.filename, c.page
-            FROM chunks c JOIN documents d ON d.id = c.document_id,
-                 websearch_to_tsquery('fr', %s) q
-            WHERE d.retired_at IS NULL AND c.tsv @@ q
-            ORDER BY ts_rank_cd(c.tsv, q) DESC, c.id
-            LIMIT %s
-            """,
-            (" or ".join(words), limit),
-        ).fetchall()
-        return [(filename, page) for filename, page in rows]
+        fused = rrf(
+            _fulltext_chunks(conn, question, limit),
+            _vector_chunks(conn, embedder, question, limit),
+        )
+        return [(d, p) for _, d, p in fused[:limit]]
 
     return retrieve
 
@@ -281,7 +328,8 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("split", help="draw the test split (refused once the test is frozen)")
     sub.add_parser("freeze", help="write the fingerprint of the test split")
     run = sub.add_parser("run", help="retrieval scores (recall@k, MRR) on a split")
-    run.add_argument("--retriever", choices=("fulltext",), default="fulltext")
+    run.add_argument("--retriever", choices=("fulltext", "vector", "hybrid"), default="fulltext")
+    run.add_argument("--model", choices=("mistral", "e5"), default="mistral")
     run.add_argument("--split", choices=SPLITS, default="dev")
     run.add_argument("--k", type=int, nargs="+", default=[5, 20])
     run.add_argument(
@@ -330,7 +378,22 @@ def main(argv: list[str] | None = None) -> None:
         if args.split == "test" and not args.final:
             raise SystemExit("the test split is scored once, at the end: pass --final")
         chosen = [case for case in cases if case.split == args.split]
-        scores = evaluate(chosen, fulltext(conn), args.k)
+        if args.retriever == "fulltext":
+            retriever = fulltext(conn)
+        else:
+            from secours_tech.embed import EMBEDDERS, missing_inputs
+
+            model = EMBEDDERS[args.model]
+            # a chunk without a vector is invisible to the vector search: scores would be biased;
+            # checked before the model is loaded
+            if missing := len(missing_inputs(conn, model.name)):
+                raise SystemExit(
+                    f"{missing} chunk inputs have no {model.name} vector: "
+                    f"run `python -m secours_tech.embed --model {args.model}` first"
+                )
+            embedder = model()
+            retriever = (vector if args.retriever == "vector" else hybrid)(conn, embedder)
+        scores = evaluate(chosen, retriever, args.k)
         for group in ["all", *CATEGORIES]:
             if group in scores:
                 row = scores[group]
