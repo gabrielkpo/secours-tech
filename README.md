@@ -142,12 +142,16 @@ pages are those of the expected excerpts.
 | Retriever | recall@5 | recall@20 | MRR |
 |---|---|---|---|
 | Full text (Postgres `fr`, any word) | 0.62 | 0.81 | 0.43 |
-| `mistral-embed` vectors (context header + text) | **0.88** | **1.00** | **0.84** |
-| Hybrid: full text + vectors, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
+| `mistral-embed` vectors (context header + text) | 0.88 | **1.00** | 0.84 |
+| Hybrid: full text + `mistral-embed`, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
+| `multilingual-e5-base` vectors (local reference, pinned) | **0.94** | 0.94 | **0.91** |
+| Hybrid: full text + `multilingual-e5-base` | **0.94** | 0.94 | 0.83 |
 
 On this small set the vectors alone do best: fused with equal weight, the weak full-text ranking
-pushes some right pages down. With 16 cases one case is 6 points, so these numbers only rank the
-variants; the local reference embedding (`multilingual-e5-base`) and reranking come next.
+pushes some right pages down. The free local model is level with `mistral-embed`: it ranks the
+right page higher (MRR 0.91 against 0.84) but misses one complex case that `mistral-embed` finds
+within 20 pages. With 16 cases one case is 6 points, so neither embedding is shown better than
+the other yet. Reranking comes below; chunk-size trials come later.
 
 **Reranking the first 50 chunks (J3, 11/11/2026, same 16 cases).** Two local models reorder the
 chunks a retriever found first: the `bge-reranker-v2-m3` cross-encoder (D11) and BGE-M3 in
