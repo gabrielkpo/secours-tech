@@ -18,3 +18,6 @@ data/tessdata/
 data/ocr-reference/
 # evaluation drafts: questions with verbatim doctrine excerpts, kept out until the set is frozen
 data/eval-draft/
+# evaluation cases (J2): expected answers quote the doctrine verbatim; only the fingerprint
+# of the frozen test split is versioned (eval/frozen-test.sha256)
+data/eval/

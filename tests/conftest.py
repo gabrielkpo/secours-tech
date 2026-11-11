@@ -1,6 +1,26 @@
+import os
 from pathlib import Path
 
+import psycopg
 import pytest
+
+from secours_tech.db import migrate
+
+TEST_URL = os.environ.get("TEST_DATABASE_URL")
+
+
+@pytest.fixture
+def conn():
+    """A migrated, empty test database; skipped when TEST_DATABASE_URL is not set."""
+    if not TEST_URL:
+        pytest.skip("TEST_DATABASE_URL is not set")
+    with psycopg.connect(TEST_URL, autocommit=True) as conn:
+        name = conn.execute("SELECT current_database()").fetchone()[0]
+        # the fixture wipes the schema: refuse anything that is not a test database
+        assert name.endswith("_test"), f"refusing to wipe {name!r}"
+        conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+        migrate(conn)
+        yield conn
 
 
 def write_pdf(path: Path, pages: list[str]) -> Path:

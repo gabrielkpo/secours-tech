@@ -21,6 +21,13 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   against the page text (versioned with the evaluation harness of J2); the firefighter reviewing
   them (the author) validates, corrects or rejects each case, and only validated or corrected
   cases are kept.
+- **The bench is frozen by fingerprint, not published.** Cases are TOML files in
+  `data/eval/cases/` (out of Git: they quote the doctrine). About 30 % of them, drawn in every
+  category with a fixed seed, form the test split; `eval/frozen-test.sha256` holds the SHA-256 of
+  those files, and `bench` refuses to run once a test case differs from it. The test split is
+  scored only with `--final`. Retrieval is scored on the pages of the expected excerpts: recall@k
+  (an expected page among the first k distinct pages) and MRR; refusal cases are left to the
+  answer scores of J4.
 - **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
   evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.
