@@ -103,7 +103,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
-| J2 Evaluation set v1 | 30 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
+| J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |

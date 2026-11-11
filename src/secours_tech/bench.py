@@ -77,10 +77,13 @@ def load_case(path: Path) -> Case:
         raise CaseError(f"{path.name}: unknown category {data['category']!r}")
     if data["split"] not in SPLITS:
         raise CaseError(f"{path.name}: unknown split {data['split']!r}")
-    excerpts = tuple(
-        Excerpt(str(e["document"]), int(e["page"]), str(e["text"]))
-        for e in data.get("excerpts", [])
-    )
+    try:
+        excerpts = tuple(
+            Excerpt(str(e["document"]), int(e["page"]), str(e["text"]))
+            for e in data.get("excerpts", [])
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise CaseError(f"{path.name}: malformed excerpt ({error!r})") from None
     refusal = bool(data.get("refusal", False))
     if not refusal and not excerpts:
         raise CaseError(f"{path.name}: an answered case needs at least one excerpt")
@@ -110,13 +113,23 @@ def normalize(text: str) -> str:
 
 @lru_cache(maxsize=512)
 def _pdf_page(path: Path, page: int, layout: bool) -> str:
+    """Text of one page; empty when pdftotext cannot read it (a page past the end, say)."""
     options = ["-layout"] if layout else []
-    return subprocess.run(
+    done = subprocess.run(
         ["pdftotext", *options, "-f", str(page), "-l", str(page), str(path), "-"],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
+        check=False,
+    )
+    return done.stdout if done.returncode == 0 else ""
+
+
+def _readings(excerpt: Excerpt, pdf: Path | None, ocr_text: Callable[[str, int], str | None]):
+    """The page's text, cheapest reading first: OCR text, then plain order, then layout order."""
+    yield normalize(ocr_text(excerpt.document, excerpt.page) or "")
+    if pdf is not None:
+        for layout in (False, True):
+            yield normalize(_pdf_page(pdf, excerpt.page, layout))
 
 
 def missing_excerpts(
@@ -131,13 +144,12 @@ def missing_excerpts(
     for case in cases:
         for excerpt in case.excerpts:
             pdf = pdfs.get(excerpt.document)
-            texts = [ocr_text(excerpt.document, excerpt.page) or ""]
-            if pdf is not None:
-                texts += [_pdf_page(pdf, excerpt.page, layout) for layout in (False, True)]
-            texts = [normalize(text) for text in texts]
             fragments = [normalize(part) for part in re.split(r"\[…\]|\[\.\.\.\]", excerpt.text)]
             fragments = [part for part in fragments if part.strip(" .")]
-            if not any(all(part in text for part in fragments) for text in texts):
+            if not fragments or not any(
+                all(part in text for part in fragments)
+                for text in _readings(excerpt, pdf, ocr_text)
+            ):
                 missing.append((case.id, excerpt))
     return missing
 
@@ -289,6 +301,8 @@ def main(argv: list[str] | None = None) -> None:
         print(f"test split: {sorted(c.id for c in cases if c.split == 'test')}")
         return
     if args.command == "freeze":
+        if frozen:
+            raise SystemExit(f"already frozen ({args.fingerprint}): a new freeze would hide edits")
         if not any(case.split == "test" for case in cases):
             raise SystemExit("no test case: run split first")
         args.fingerprint.parent.mkdir(parents=True, exist_ok=True)

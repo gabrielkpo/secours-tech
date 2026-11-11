@@ -64,6 +64,7 @@ def test_a_case_is_read_with_the_pages_it_expects(tmp_path):
         (lambda t: t.replace('category = "simple"', 'category = "other"'), "unknown category"),
         (lambda t: t.replace('id = "Q01"', 'id = "Q02"'), "differs from the file name"),
         (lambda t: t.split("[[excerpts]]")[0], "needs at least one excerpt"),
+        (lambda t: t.replace("page = 1", 'page = "un"'), "malformed excerpt"),
     ],
 )
 def test_a_malformed_case_is_refused(tmp_path, edit, message):
@@ -123,12 +124,13 @@ def test_excerpts_are_found_word_for_word_on_their_page(tmp_path, make_pdf):
             Excerpt("guide.pdf", 2, "Couper le gaz […] ventiler le local."),
             Excerpt("guide.pdf", 1, "Couper le gaz"),  # right text, wrong page
             Excerpt("scan.pdf", 4, "lu par OCR."),  # no PDF here: OCR text only
+            Excerpt("guide.pdf", 9, "Couper le gaz"),  # past the end of the PDF
         ),
         Path("x"),
     )
     ocr = {("scan.pdf", 4): "Texte lu par OCR."}
     missing = missing_excerpts([case], pdf.parent, lambda d, p: ocr.get((d, p)))
-    assert [(e.document, e.page) for _, e in missing] == [("guide.pdf", 1)]
+    assert [(e.document, e.page) for _, e in missing] == [("guide.pdf", 1), ("guide.pdf", 9)]
 
 
 def test_recall_and_mrr_count_each_page_once():
@@ -154,3 +156,15 @@ def test_fulltext_ranks_the_page_that_shares_words_with_the_question(conn):
     store_document(conn, SourceDocument("GDO-test.pdf", "a" * 64, texts, pages))
     assert fulltext(conn)("Faut-il couper le gaz ?")[0] == ("GDO-test.pdf", 2)
     assert fulltext(conn)("???") == []
+
+
+def test_a_frozen_test_split_cannot_be_frozen_again(tmp_path):
+    from secours_tech.bench import main
+
+    cases, stamp = tmp_path / "cases", tmp_path / "frozen.sha256"
+    cases.mkdir()
+    write_case(cases)
+    write_split(load_case(cases / "Q01.toml"), "test")
+    main(["--cases", str(cases), "--fingerprint", str(stamp), "freeze"])
+    with pytest.raises(SystemExit, match="already frozen"):
+        main(["--cases", str(cases), "--fingerprint", str(stamp), "freeze"])
