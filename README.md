@@ -104,7 +104,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
 | J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
-| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
+| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, `mistral-embed` and hybrid RRF measured |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
 | J6 Collection | Sources manifest, monthly watch, versions | done; downloads stay manual |
@@ -136,6 +136,19 @@ the bench refuses to run if a test case changed. First measure, full text only, 
 dev cases: right page in the first 5 pages for 62 % of the cases, in the first 20 for 81 %, MRR
 0.43. Embeddings and hybrid search (J3) are scored against this baseline.
 
+**Retrieval so far (J3, 11/11/2026, 16 answered dev cases).** A page counts once; the expected
+pages are those of the expected excerpts.
+
+| Retriever | recall@5 | recall@20 | MRR |
+|---|---|---|---|
+| Full text (Postgres `fr`, any word) | 0.62 | 0.81 | 0.43 |
+| `mistral-embed` vectors (context header + text) | **0.88** | **1.00** | **0.84** |
+| Hybrid: full text + vectors, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
+
+On this small set the vectors alone do best: fused with equal weight, the weak full-text ranking
+pushes some right pages down. With 16 cases one case is 6 points, so these numbers only rank the
+variants; the local reference embedding (`multilingual-e5-base`) and reranking come next.
+
 ## Run it
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract (local checker), a Mistral API key in `.env` (OCR), and the official PDFs in
@@ -149,7 +162,8 @@ uv run python -m secours_tech.load data/raw          # text layer, page routes, 
 uv run python -m secours_tech.ocr data/raw           # Mistral OCR of the pages routed to OCR (needs MISTRAL_API_KEY)
 uv run python -m secours_tech.ocr_bench index        # index the OCR of the guides that pass
 uv run python -m secours_tech.bench check            # every expected excerpt is on its page
-uv run python -m secours_tech.bench run              # retrieval scores on the dev split
+uv run python -m secours_tech.embed --model mistral  # embed the chunks (needs MISTRAL_API_KEY)
+uv run python -m secours_tech.bench run --retriever vector   # retrieval scores on the dev split
 uv run pytest                              # set TEST_DATABASE_URL to run the database tests
 ```
 
@@ -170,6 +184,7 @@ milestones need (server side only).
 | `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
 | `src/secours_tech/bench.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), recall@k and MRR |
+| `src/secours_tech/embed.py` | Chunk embeddings: `mistral-embed`, and `multilingual-e5-base` as local reference (`--extra local`) |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
 | `docs/architecture.md` | Architecture decisions |
@@ -200,8 +215,8 @@ milestones need (server side only).
   misread on the sample, and the dog teams guide has a 2.8 % character error rate; they stay
   out of the index, and so do the 5 OCR pages of the PSE technical references, which have no
   hand-checked sample yet.
-- **No answers yet.** Only the full-text baseline of retrieval is measured (see the bench above);
-  embeddings, hybrid search, generation and the citation check are designed but not built.
+- **No answers yet.** Retrieval is measured (see above); generation and the citation check are
+  designed but not built.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
   for an individual case.
 

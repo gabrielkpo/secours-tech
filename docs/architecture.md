@@ -28,6 +28,13 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   scored only with `--final`. Retrieval is scored on the pages of the expected excerpts: recall@k
   (an expected page among the first k distinct pages) and MRR; refusal cases are left to the
   answer scores of J4.
+- **Embeddings are stored per model and per input, not per chunk.** What a model embeds is the
+  chunk's context header and its text (`chunk_input()` in SQL, D7); `chunks.input_sha256` is its
+  hash, computed by Postgres, and `embeddings` is keyed by (model, hash). Rebuilding the chunks
+  keeps every vector whose input did not change, so no text is paid for twice. The vector column
+  is untyped, since models differ in size (1024 for `mistral-embed-2312`, pinned; 768 for e5);
+  7,500 chunks are searched exactly, without an index. The hybrid search fuses the full-text and
+  vector rankings by reciprocal rank (k = 60, D10).
 - **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
   evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.
