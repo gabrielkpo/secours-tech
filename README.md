@@ -142,7 +142,7 @@ pages are those of the expected excerpts.
 | Retriever | recall@5 | recall@20 | MRR |
 |---|---|---|---|
 | Full text (Postgres `fr`, any word) | 0.62 | 0.81 | 0.43 |
-| `mistral-embed` vectors (context header + text) | **0.88** | **1.00** | **0.84** |
+| `mistral-embed` vectors (context header + text) | 0.88 | **1.00** | 0.84 |
 | Hybrid: full text + `mistral-embed`, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
 | `multilingual-e5-base` vectors (local reference, pinned) | **0.94** | 0.94 | **0.91** |
 | Hybrid: full text + `multilingual-e5-base` | **0.94** | 0.94 | 0.83 |
