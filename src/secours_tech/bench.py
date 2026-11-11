@@ -18,6 +18,7 @@ import hashlib
 import random
 import re
 import subprocess
+import time
 import tomllib
 import unicodedata
 from collections.abc import Callable, Sequence
@@ -284,25 +285,50 @@ def rrf(*rankings: Sequence[tuple[int, str, int]], k: int = RRF_K) -> list[tuple
     return sorted(rows.values(), key=lambda row: -scores[row[0]])
 
 
+def _hybrid_chunks(conn, embedder, question: str, limit: int) -> list[tuple[int, str, int]]:
+    """Full text and vectors fused by reciprocal rank (D10)."""
+    fused = rrf(
+        _fulltext_chunks(conn, question, limit),
+        _vector_chunks(conn, embedder, question, limit),
+    )
+    return fused[:limit]
+
+
+def _pages(candidates: Callable[[str], Sequence[tuple[int, str, int]]]) -> Retriever:
+    return lambda question: [(d, p) for _, d, p in candidates(question)]
+
+
 def fulltext(conn, limit: int = 50) -> Retriever:
     """Baseline: Postgres French full text over the chunks of the current guides, any word of
     the question (OR), ranked by ts_rank_cd."""
-    return lambda question: [(d, p) for _, d, p in _fulltext_chunks(conn, question, limit)]
+    return _pages(lambda question: _fulltext_chunks(conn, question, limit))
 
 
 def vector(conn, embedder, limit: int = 50) -> Retriever:
-    return lambda question: [(d, p) for _, d, p in _vector_chunks(conn, embedder, question, limit)]
+    return _pages(lambda question: _vector_chunks(conn, embedder, question, limit))
 
 
 def hybrid(conn, embedder, limit: int = 50) -> Retriever:
-    """Full text and vectors fused by reciprocal rank (D10)."""
+    return _pages(lambda question: _hybrid_chunks(conn, embedder, question, limit))
+
+
+def reranked(
+    conn, candidates: Callable[[str], Sequence[tuple[int, str, int]]], reranker
+) -> Retriever:
+    """The first chunks of a retriever, reordered by a reranker that reads each chunk's input
+    (context header and text, D7) with the question (D11, D20)."""
+    from secours_tech.rerank import rerank
 
     def retrieve(question: str) -> list[tuple[str, int]]:
-        fused = rrf(
-            _fulltext_chunks(conn, question, limit),
-            _vector_chunks(conn, embedder, question, limit),
+        rows = list(candidates(question))
+        texts = dict(
+            conn.execute(
+                "SELECT id, chunk_input(context, text) FROM chunks WHERE id = ANY(%s)",
+                ([row[0] for row in rows],),
+            ).fetchall()
         )
-        return [(d, p) for _, d, p in fused[:limit]]
+        ordered = rerank(reranker, question, rows, [texts[row[0]] for row in rows])
+        return [(d, p) for _, d, p in ordered]
 
     return retrieve
 
@@ -330,6 +356,9 @@ def main(argv: list[str] | None = None) -> None:
     run = sub.add_parser("run", help="retrieval scores (recall@k, MRR) on a split")
     run.add_argument("--retriever", choices=("fulltext", "vector", "hybrid"), default="fulltext")
     run.add_argument("--model", choices=("mistral", "e5"), default="mistral")
+    run.add_argument(
+        "--rerank", choices=("none", "bge", "m3"), default="none", help="rerank the first 50"
+    )
     run.add_argument("--split", choices=SPLITS, default="dev")
     run.add_argument("--k", type=int, nargs="+", default=[5, 20])
     run.add_argument(
@@ -378,9 +407,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.split == "test" and not args.final:
             raise SystemExit("the test split is scored once, at the end: pass --final")
         chosen = [case for case in cases if case.split == args.split]
-        if args.retriever == "fulltext":
-            retriever = fulltext(conn)
-        else:
+        embedder = None
+        if args.retriever != "fulltext":
             from secours_tech.embed import EMBEDDERS, missing_inputs
 
             model = EMBEDDERS[args.model]
@@ -392,8 +420,21 @@ def main(argv: list[str] | None = None) -> None:
                     f"run `python -m secours_tech.embed --model {args.model}` first"
                 )
             embedder = model()
-            retriever = (vector if args.retriever == "vector" else hybrid)(conn, embedder)
+        candidates = {
+            "fulltext": lambda question: _fulltext_chunks(conn, question, 50),
+            "vector": lambda question: _vector_chunks(conn, embedder, question, 50),
+            "hybrid": lambda question: _hybrid_chunks(conn, embedder, question, 50),
+        }[args.retriever]
+        if args.rerank == "none":
+            retriever = _pages(candidates)
+        else:
+            from secours_tech.rerank import RERANKERS
+
+            retriever = reranked(conn, candidates, RERANKERS[args.rerank]())
+        started = time.perf_counter()
         scores = evaluate(chosen, retriever, args.k)
+        answered = sum(not case.refusal for case in chosen)
+        print(f"{(time.perf_counter() - started) / max(answered, 1):.2f} s per question")
         for group in ["all", *CATEGORIES]:
             if group in scores:
                 row = scores[group]

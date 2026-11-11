@@ -35,6 +35,13 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   is untyped, since models differ in size (1024 for `mistral-embed-2312`, pinned; 768 for e5);
   7,500 chunks are searched exactly, without an index. The hybrid search fuses the full-text and
   vector rankings by reciprocal rank (k = 60, D10).
+- **Reranking is local and stores nothing.** The first 50 chunks of a retriever are reordered
+  either by the `bge-reranker-v2-m3` cross-encoder (D11) or by BGE-M3's multi-vector head (D20:
+  a vector per token, each question token keeps its best match, the score is their mean). Both
+  models are pinned to a Hugging Face commit; BGE-M3 publishes only pickle weights, loaded with
+  torch's `weights_only` unpickler (tensors only). Per-token vectors are computed on the fly
+  rather than stored: storing them for every chunk would take gigabytes and pgvector cannot
+  compute the max-sim score.
 - **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
   evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.

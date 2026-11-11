@@ -104,7 +104,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
 | J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
-| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, `mistral-embed` and hybrid RRF measured |
+| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, two embeddings, hybrid RRF and two rerankers measured |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
 | J6 Collection | Sources manifest, monthly watch, versions | done; downloads stay manual |
@@ -149,6 +149,28 @@ On this small set the vectors alone do best: fused with equal weight, the weak f
 pushes some right pages down. With 16 cases one case is 6 points, so these numbers only rank the
 variants; the local reference embedding (`multilingual-e5-base`) and reranking come next.
 
+**Reranking the first 50 chunks (J3, 11/11/2026, same 16 cases).** Two local models reorder the
+chunks a retriever found first: the `bge-reranker-v2-m3` cross-encoder (D11) and BGE-M3 in
+multi-vector mode (D20, one vector per token, best match per question token). Seconds per
+question on the Mac's CPU (M1, 8 GB), embedding and reranking included.
+
+| First stage | Reranker | recall@5 | recall@20 | MRR | s / question |
+|---|---|---|---|---|---|
+| `mistral-embed` vectors | `bge-reranker-v2-m3` | **0.94** | **1.00** | **0.94** | 28 |
+| `mistral-embed` vectors | BGE-M3 multi-vector | **0.94** | **1.00** | 0.90 | 17 |
+| Hybrid, `mistral-embed` | `bge-reranker-v2-m3` | 0.88 | **1.00** | 0.86 | 20 |
+| Hybrid, `mistral-embed` | BGE-M3 multi-vector | 0.88 | 0.94 | 0.89 | 20 |
+| `multilingual-e5-base` vectors | `bge-reranker-v2-m3` | **0.94** | 0.94 | 0.91 | 20 |
+| `multilingual-e5-base` vectors | BGE-M3 multi-vector | **0.94** | 0.94 | **0.94** | 18 |
+| Hybrid, `multilingual-e5-base` | `bge-reranker-v2-m3` | **0.94** | 0.94 | 0.91 | 21 |
+| Hybrid, `multilingual-e5-base` | BGE-M3 multi-vector | **0.94** | 0.94 | **0.94** | 22 |
+
+Reranking lifts every first stage; the best pair here is `mistral-embed` then
+`bge-reranker-v2-m3` (15 of 16 right pages in the first 5, all 16 in the first 20). One complex
+case stays out of the first 5 whatever the pair. On a laptop CPU, reranking 50 chunks takes 17 to
+28 s per question, far above the 8 s target of the scoping: it needs fewer chunks, the GPU, or a
+server before it can serve users.
+
 ## Run it
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract (local checker), a Mistral API key in `.env` (OCR), and the official PDFs in
@@ -184,7 +206,7 @@ milestones need (server side only).
 | `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
 | `src/secours_tech/bench.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), recall@k and MRR |
-| `src/secours_tech/embed.py` | Chunk embeddings: `mistral-embed`, and `multilingual-e5-base` as local reference (`--extra local`) |
+| `src/secours_tech/embed.py`, `rerank.py` | Chunk embeddings (`mistral-embed`, `multilingual-e5-base`) and local reranking (`bge-reranker-v2-m3`, BGE-M3 multi-vector; `--extra local`) |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
 | `docs/architecture.md` | Architecture decisions |
