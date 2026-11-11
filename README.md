@@ -103,7 +103,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
-| J2 Evaluation set v1 | 30 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | in progress |
+| J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | planned |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
@@ -125,6 +125,17 @@ per question. Serious faults (invented citation, figure absent from the sources,
 question answered, individual medical advice) must stay at 0. Baselines: the LLM alone without
 retrieval, then each retrieval variant.
 
+**The bench (J2, 11/11/2026).** 31 cases, all asked as a firefighter would ask them: 11 simple
+questions, 5 complex situations, 5 tasks per function, 5 out-of-doctrine questions, 3 traps and 2
+medical ones (medication only as the PSE references allow it: prescribed, or asked for by the
+regulating doctor). 283 excerpts back the expected answers; `bench check` finds every one word
+for word on its page. 9 cases (30 %, drawn in every category) form the **frozen test split**,
+scored once at the end; the other 22 tune the system. The cases quote the doctrine, so they stay
+out of Git; only the fingerprint of the test split is versioned (`eval/frozen-test.sha256`), and
+the bench refuses to run if a test case changed. First measure, full text only, on the 16 answered
+dev cases: right page in the first 5 pages for 62 % of the cases, in the first 20 for 81 %, MRR
+0.43. Embeddings and hybrid search (J3) are scored against this baseline.
+
 ## Run it
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract (local checker), a Mistral API key in `.env` (OCR), and the official PDFs in
@@ -137,6 +148,8 @@ export DATABASE_URL=postgresql:///secours_tech
 uv run python -m secours_tech.load data/raw          # text layer, page routes, sections
 uv run python -m secours_tech.ocr data/raw           # Mistral OCR of the pages routed to OCR (needs MISTRAL_API_KEY)
 uv run python -m secours_tech.ocr_bench index        # index the OCR of the guides that pass
+uv run python -m secours_tech.bench check            # every expected excerpt is on its page
+uv run python -m secours_tech.bench run              # retrieval scores on the dev split
 uv run pytest                              # set TEST_DATABASE_URL to run the database tests
 ```
 
@@ -146,7 +159,8 @@ contents (or, without one, from its headings), and its chunks in `chunks` (page,
 full-text vector). Running it twice changes nothing; after a change to the extraction or the
 structure, `load data/raw --reextract` applies it to the guides already loaded. `ocr_bench index`
 needs the hand transcriptions in `data/ocr-reference/` (kept out of Git) and writes its decision
-to `corpus/ocr-validation.toml`. `.env.example` lists the Mistral key the next
+to `corpus/ocr-validation.toml`. `bench` needs the cases in `data/eval/cases/` (kept out of Git);
+the frozen test split is scored only with `run --split test --final`. `.env.example` lists the Mistral key the next
 milestones need (server side only).
 
 ## Project structure
@@ -155,6 +169,7 @@ milestones need (server side only).
 |---|---|
 | `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
+| `src/secours_tech/bench.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), recall@k and MRR |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
 | `docs/architecture.md` | Architecture decisions |
@@ -185,8 +200,8 @@ milestones need (server side only).
   misread on the sample, and the dog teams guide has a 2.8 % character error rate; they stay
   out of the index, and so do the 5 OCR pages of the PSE technical references, which have no
   hand-checked sample yet.
-- **No answers yet.** Retrieval, generation and the citation check are designed but not built,
-  so there are no results to report.
+- **No answers yet.** Only the full-text baseline of retrieval is measured (see the bench above);
+  embeddings, hybrid search, generation and the citation check are designed but not built.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
   for an individual case.
 
