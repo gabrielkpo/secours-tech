@@ -104,7 +104,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
 | J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
-| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, `mistral-embed` and hybrid RRF measured |
+| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, `mistral-embed`, `multilingual-e5-base` and hybrid RRF measured |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
 | J6 Collection | Sources manifest, monthly watch, versions | done; downloads stay manual |
@@ -143,11 +143,15 @@ pages are those of the expected excerpts.
 |---|---|---|---|
 | Full text (Postgres `fr`, any word) | 0.62 | 0.81 | 0.43 |
 | `mistral-embed` vectors (context header + text) | **0.88** | **1.00** | **0.84** |
-| Hybrid: full text + vectors, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
+| Hybrid: full text + `mistral-embed`, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
+| `multilingual-e5-base` vectors (local reference, pinned) | **0.94** | 0.94 | **0.91** |
+| Hybrid: full text + `multilingual-e5-base` | **0.94** | 0.94 | 0.83 |
 
 On this small set the vectors alone do best: fused with equal weight, the weak full-text ranking
-pushes some right pages down. With 16 cases one case is 6 points, so these numbers only rank the
-variants; the local reference embedding (`multilingual-e5-base`) and reranking come next.
+pushes some right pages down. The free local model is level with `mistral-embed`: it ranks the
+right page higher (MRR 0.91 against 0.84) but misses one complex case that `mistral-embed` finds
+within 20 pages. With 16 cases one case is 6 points, so neither embedding is shown better than
+the other yet; reranking and chunk-size trials come next.
 
 ## Run it
 
