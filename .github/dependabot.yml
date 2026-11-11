@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # a release is proposed only once it is 14 days old (supply-chain caution); security updates
+    # are never delayed by the cooldown
+    cooldown:
+      default-days: 14
     # Conventional Commits titles, so the PR title check passes; one grouped PR per week
     commit-message:
       prefix: "chore(deps)"
@@ -14,6 +18,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 14
     commit-message:
       prefix: "chore(ci)"
     groups:
