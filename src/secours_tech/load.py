@@ -276,6 +276,16 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
             "DELETE FROM chunks WHERE document_id = %s AND extraction = 'text_layer'",
             (document_id,),
         )
+        # OCR chunks filed under the loader's sections would lose their section with them: they
+        # are withdrawn, and `ocr_bench index` rebuilds them on the new sections
+        withdrawn = conn.execute(
+            "DELETE FROM chunks c USING sections s WHERE c.section_id = s.id"
+            " AND c.document_id = %s AND c.extraction = 'ocr' AND s.origin <> 'ocr'",
+            (document_id,),
+        ).rowcount
+        if withdrawn:
+            log.warning("%s: %d indexed OCR chunk(s) withdrawn, run ocr_bench index again",
+                        doc.filename, withdrawn)  # fmt: skip
         # OCR sections belong to `ocr_bench index`, which rebuilds them with the OCR chunks
         conn.execute(
             "DELETE FROM sections WHERE document_id = %s AND origin <> 'ocr'", (document_id,)

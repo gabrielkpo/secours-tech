@@ -410,3 +410,28 @@ def test_the_loader_refuses_a_pdf_outside_the_manifest(make_pdf, tmp_path, monke
         load.main([str(folder), "--manifest", str(manifest)])
     with pytest.raises(SystemExit, match="no manifest"):
         load.main([str(folder), "--manifest", str(tmp_path / "missing.toml")])
+
+
+def test_reextract_withdraws_ocr_chunks_filed_under_the_loader_sections(conn, caplog):
+    import logging
+
+    from secours_tech.load import reextract_document
+    from secours_tech.structure import Section
+
+    sections = (Section("1. Objectif", 1, 1, ("1. Objectif",)),)
+    pages = (Page(1, "1. Objectif\nVentiler.", "text_layer", 30, 0, 0, 1.0),)
+    doc = SourceDocument("GTO-mix.pdf", "a" * 64, ["1. Objectif\nVentiler."], pages, sections)
+    store_document(conn, doc)
+    (doc_id,), (section_id,) = (
+        conn.execute("SELECT id FROM documents").fetchone(),
+        conn.execute("SELECT id FROM sections WHERE origin <> 'ocr'").fetchone(),
+    )
+    conn.execute(
+        "INSERT INTO chunks (document_id, page, position, text, extraction, section_id)"
+        " VALUES (%s, 2, 99, 'Texte lu par OCR.', 'ocr', %s)",
+        (doc_id, section_id),
+    )
+    with caplog.at_level(logging.WARNING):
+        reextract_document(conn, doc_id, doc)
+    assert conn.execute("SELECT count(*) FROM chunks WHERE extraction = 'ocr'").fetchone() == (0,)
+    assert "run ocr_bench index again" in caplog.text
