@@ -19,6 +19,8 @@ from pathlib import Path
 
 import psycopg
 
+from secours_tech.tools import run_tool
+
 
 @dataclass(frozen=True)
 class Setup:
@@ -60,16 +62,9 @@ def _models(setup: Setup) -> dict:
 def _code() -> dict:
     """The commit the run used, and whether the working tree differed from it."""
     try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        ).stdout.strip()
-        changes = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout
-    except (OSError, subprocess.CalledProcessError):
+        commit = run_tool("git", "rev-parse", "HEAD", timeout=30).strip()
+        changes = run_tool("git", "status", "--porcelain", "--untracked-files=no", timeout=30)
+    except (OSError, RuntimeError, subprocess.SubprocessError):
         return {"commit": None, "dirty": None}
     return {"commit": commit, "dirty": bool(changes.strip())}
 

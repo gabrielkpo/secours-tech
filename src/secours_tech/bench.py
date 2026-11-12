@@ -27,6 +27,8 @@ from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
+from secours_tech.tools import run_tool
+
 CASES = Path("data/eval/cases")
 FINGERPRINT = Path("eval/frozen-test.sha256")
 RUNS = Path("eval/runs")
@@ -125,24 +127,13 @@ def _pdf_page(path: Path, page: int, mode: str) -> str:
     """Text of one page in a reading order of pdftotext ("plain", "raw" or "layout"); empty
     when pdftotext cannot read it (a page past the end, say)."""
     options = [] if mode == "plain" else [f"-{mode}"]
-    done = subprocess.run(
-        [
-            "pdftotext",
-            *options,
-            "-enc",
-            "UTF-8",
-            "-f",
-            str(page),
-            "-l",
-            str(page),
-            str(path.resolve()),
-            "-",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return done.stdout if done.returncode == 0 else ""
+    page_range = ("-f", str(page), "-l", str(page))
+    try:
+        return run_tool(
+            "pdftotext", *options, "-enc", "UTF-8", *page_range, str(path.resolve()), "-"
+        )
+    except subprocess.SubprocessError:
+        return ""
 
 
 def _readings(excerpt: Excerpt, pdf: Path | None, ocr_text: Callable[[str, int], str | None]):

@@ -39,6 +39,7 @@ import pikepdf
 from secours_tech.db import connect, migrate
 from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
 from secours_tech.mistral import MistralError, api_key, post
+from secours_tech.tools import run_tool
 
 log = logging.getLogger(__name__)
 
@@ -75,9 +76,7 @@ def fetch_model(directory: Path = MODEL_DIR) -> Path:
 
 
 def engine_version() -> str:
-    first_line = subprocess.run(
-        ["tesseract", "--version"], check=True, capture_output=True, text=True
-    ).stdout.splitlines()[0]
+    first_line = run_tool("tesseract", "--version").splitlines()[0]
     return f"{first_line} fra best {MODEL_COMMIT[:7]} {SETTINGS}"
 
 
@@ -151,13 +150,11 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
         image = Path(tmp) / "page"
         single = Path(tmp) / "page.pdf"
         text_only_copy(pdf.resolve(), page, single)
-        subprocess.run(
-            ["pdftoppm", "-r", str(DPI), "-gray", "-png", "-singlefile", str(single), str(image)],
-            check=True,
-            capture_output=True,
-        )  # fmt: skip
-        tsv = subprocess.run(
-            [
+        run_tool(
+            "pdftoppm", "-r", str(DPI), "-gray", "-png", "-singlefile", str(single), str(image)
+        )
+        tsv = run_tool(
+            *[
                 "tesseract",
                 f"{image}.png",
                 "-",
@@ -178,11 +175,12 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
                 "-c",
                 "tessedit_create_txt=0",
             ],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ, "TESSDATA_PREFIX": str(model_dir.resolve())},
-        ).stdout
+            # tesseract gets its model folder, and none of the secrets in the environment
+            env={
+                **{k: v for k, v in os.environ.items() if k != "MISTRAL_API_KEY"},
+                "TESSDATA_PREFIX": str(model_dir.resolve()),
+            },
+        )
     return text_from_tsv(tsv)
 
 
