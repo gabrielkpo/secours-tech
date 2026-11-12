@@ -1,16 +1,12 @@
 """Turn PDFs into chunks that remember which document and page they came from."""
 
-import argparse
-import json
 import logging
 import re
 from collections import Counter
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import asdict, dataclass
-from pathlib import Path
+from dataclasses import dataclass
 
-from secours_tech.extract import extract_pages
 from secours_tech.structure import Section, split_page
 
 log = logging.getLogger(__name__)
@@ -220,35 +216,3 @@ def pages_to_chunks(
                 Chunk(document, number, part, section) for part in chunk_text(piece, size)
             )
     return chunks
-
-
-def read_pages(path: Path) -> list[str]:
-    """Text layer of every page, in order. A page routed to OCR or blank gives an empty string."""
-    return [page.text for page in extract_pages(path)]
-
-
-def ingest_pdf(path: Path, size: int = 800) -> list[Chunk]:
-    return pages_to_chunks(path.name, read_pages(path), size)
-
-
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Ingest every PDF of a folder into a JSONL file.")
-    parser.add_argument("source", type=Path, help="folder containing PDFs (searched recursively)")
-    parser.add_argument("output", type=Path, help="JSONL file to write, one chunk per line")
-    args = parser.parse_args(argv)
-
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    total = 0
-    with args.output.open("w", encoding="utf-8") as out:
-        for pdf in sorted(args.source.rglob("*.pdf")):
-            chunks = ingest_pdf(pdf)
-            for chunk in chunks:
-                out.write(json.dumps(asdict(chunk), ensure_ascii=False) + "\n")
-            total += len(chunks)
-            log.info("%s: %d chunks", pdf.name, len(chunks))
-    log.info("done: %d chunks in %s", total, args.output)
-
-
-if __name__ == "__main__":
-    main()

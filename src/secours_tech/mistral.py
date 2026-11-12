@@ -8,13 +8,14 @@ The standard library is enough here; the official SDK would add a dependency for
 
 import http.client
 import json
-import os
 import random
 import re
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+from secours_tech.env import setting
 
 API = "https://api.mistral.ai/v1"
 RETRIES = 5
@@ -41,11 +42,7 @@ def _wait(attempt: int, retry_after: str | None = None) -> float:
 
 
 def api_key(env_file: Path = Path(".env")) -> str:
-    key = os.environ.get("MISTRAL_API_KEY", "").strip()
-    if not key and env_file.exists():
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            if line.startswith("MISTRAL_API_KEY="):
-                key = line.split("=", 1)[1].strip().strip("\"'")
+    key = setting("MISTRAL_API_KEY", env_file)
     if not key:
         raise MistralError("MISTRAL_API_KEY is not set (environment or .env)")
     return key
