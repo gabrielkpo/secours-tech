@@ -29,7 +29,7 @@ file whose fingerprint changed is refused, with both editions described, until
 | OCR | `python -m secours_tech.ocr data/raw --dry-run`, then without it | Mistral OCR, one call per page routed to OCR (about 1,200) | `--limit N` reads at most N pages; failed or empty readings are kept for the next run. |
 | OCR gate and index | `python -m secours_tech.ocr_bench index` | no | Needs the hand transcriptions in `data/ocr-reference/` (not published); writes `corpus/ocr-validation.toml`. |
 | Embeddings | `python -m secours_tech.embed --model mistral --dry-run`, then without it | Mistral embeddings, only the chunk inputs without a vector | `--model e5` runs locally (local extra). |
-| Bench check | `python -m secours_tech.bench check` | no | Needs the cases in `data/eval/cases/` (not published). |
+| Bench check | `python -m secours_tech.bench check` | no | Needs the cases in `data/eval/cases/` (not published). Run it in the image, whose poppler reads the PDF pages as the reference index does. |
 | Bench run | `python -m secours_tech.bench run --retriever vector --model e5` | only with `--model mistral` (one short call per question) | Writes a record to `eval/runs/`; `bench report eval/runs/*.json` prints the table. |
 
 Every command is run with `uv run` from the repository root. A run's record names the commit it
