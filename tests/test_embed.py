@@ -2,6 +2,7 @@ import hashlib
 
 from secours_tech import embed
 from secours_tech.bench import hybrid, rrf, vector
+from secours_tech.collect import Entry
 from secours_tech.embed import MistralEmbedder, as_vector, embed_corpus, missing_inputs
 from secours_tech.extract import Page
 from secours_tech.load import SourceDocument, store_document
@@ -30,7 +31,11 @@ class FakeEmbedder:
 
 def _guide(conn, texts=("Le silo stocke du grain.", "Couper le gaz avant de ventiler.")):
     pages = tuple(Page(i, t, "text_layer", 30, 0, 0, 1.0) for i, t in enumerate(texts, start=1))
-    store_document(conn, SourceDocument("GDO-test.pdf", "a" * 64, list(texts), pages))
+    store_document(
+        conn,
+        SourceDocument("GDO-test.pdf", "a" * 64, list(texts), pages),
+        Entry("GDO", "Test", "https://example.org/GDO-test.pdf", "a" * 64),
+    )
 
 
 def test_the_input_hash_is_the_context_then_the_text(conn):

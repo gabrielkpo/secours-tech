@@ -395,3 +395,16 @@ def test_the_loader_fails_when_a_guide_of_the_manifest_has_no_current_edition(
     assert conn.execute("SELECT url FROM documents WHERE retired_at IS NULL").fetchall() == [
         ("https://example.org/gaz.pdf",)
     ]
+
+
+def test_the_loader_refuses_a_pdf_outside_the_manifest(make_pdf, tmp_path, monkeypatch):
+    from secours_tech import load
+
+    folder = make_pdf(["Couper le gaz."], name="GDO-old.pdf").parent
+    manifest = tmp_path / "sources.toml"
+    manifest.write_text("", encoding="utf-8")
+    monkeypatch.setattr(load, "connect", lambda: pytest.fail("nothing may be loaded"))
+    with pytest.raises(SystemExit, match="not in .* nothing is loaded: GDO-old.pdf"):
+        load.main([str(folder), "--manifest", str(manifest)])
+    with pytest.raises(SystemExit, match="no manifest"):
+        load.main([str(folder), "--manifest", str(tmp_path / "missing.toml")])

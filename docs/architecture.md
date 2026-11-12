@@ -73,6 +73,10 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   way; the PSE flowcharts have no headings and stay without.
 - **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
   effect of OCR on retrieval and citations can be measured.
+- **A note mark never joins a number.** The plain text layer writes a raised note mark against
+  the number before it ("1998" then a small raised "4" reads "19984"); the word boxes of
+  `pdftotext -tsv` find smaller, raised digits touching a number, and the text keeps them apart
+  with a caret ("1998^4", "10^3"). OCR text follows the same rule.
 - **Each page is routed, not guessed.** `pdftotext` (poppler) reads the text layer; `pdfimages`
   counts the images and the high-resolution 1-bit masks, which is how the ministry's Word
   exports draw lines of text. A page goes to `text_layer` (enough clean letters), `ocr` (3+ text
@@ -86,10 +90,13 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Official sources live in a manifest** (`corpus/sources.toml`: family, title, official URL,
   SHA-256), reviewed in PRs. The loader takes family, title and URL from it; a new file at the
   same URL becomes the next version and the previous one is marked `retired_at` (kept, so an
-  earlier citation can still be traced). A file with new bytes but the same text (re-signed,
-  re-exported) takes the place of the loaded edition instead; a guide with pages drawn as
-  images is fingerprinted by its file, since its text layer does not cover them. After syncing
-  with the manifest the loader fails if a guide of the manifest has no current edition.
+  earlier citation can still be traced). The loader refuses a PDF whose SHA-256 is not in the
+  manifest (an old edition, a truncated download, a local note), and loads nothing; with
+  `--allow-local` such a file is loaded as a `local` document that retrieval never returns. A
+  file with new bytes but the same text (re-signed, re-exported) takes the place of the loaded
+  edition instead; a guide with pages drawn as images is fingerprinted by its file, since its
+  text layer does not cover them. After syncing with the manifest the loader fails if a guide
+  of the manifest has no current edition.
 - **Collection is watched, not forced.** The ministry's site (securite-civile.interieur.gouv.fr)
   answers 403 to automated clients. `collect check` identifies itself as a bot and does not pose
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked
@@ -99,7 +106,8 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   without its pictures (`pikepdf`: every image that is not a few-pixel text mask is removed, so
   photos, drawings and grey boxes neither hide text nor read as gibberish) and reads it with
   **Mistral OCR** (`mistral-ocr-4-1`, pinned; its Markdown is turned into plain text, superscripts
-  written inline). Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
+  after a letter written inline, raised digits after a number kept apart with a caret).
+  Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
   pages, 10 of 14 guides pass with Mistral OCR, 2 with Tesseract tuned (text-only copy, 600 dpi,
   Sauvola). On the full run, scored by `ocr_bench index`, 11 of the 14 sampled guides pass
   (`corpus/ocr-validation.toml`). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as

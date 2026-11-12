@@ -23,8 +23,9 @@ def conn():
         yield conn
 
 
-def write_pdf(path: Path, pages: list[str]) -> Path:
-    """Write a minimal PDF with one line of Helvetica text per page ("" gives a blank page)."""
+def write_pdf(path: Path, pages: list[str], streams: bool = False) -> Path:
+    """Write a minimal PDF with one line of Helvetica text per page ("" gives a blank page), or,
+    with `streams`, each page's content stream as given (font /F1 is Helvetica)."""
     objects = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "",
@@ -33,7 +34,7 @@ def write_pdf(path: Path, pages: list[str]) -> Path:
     kids = []
     for text in pages:
         escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-        stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET" if text else ""
+        stream = text if streams else f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET" if text else ""
         data = stream.encode("cp1252")
         objects.append(f"<< /Length {len(data)} >>\nstream\n{stream}\nendstream")
         content = len(objects)
@@ -61,4 +62,4 @@ def write_pdf(path: Path, pages: list[str]) -> Path:
 
 @pytest.fixture
 def make_pdf(tmp_path: Path):
-    return lambda pages, name="doc.pdf": write_pdf(tmp_path / name, pages)
+    return lambda pages, name="doc.pdf", streams=False: write_pdf(tmp_path / name, pages, streams)

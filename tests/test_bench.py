@@ -17,6 +17,7 @@ from secours_tech.bench import (
     summarize,
     write_split,
 )
+from secours_tech.collect import Entry
 from secours_tech.extract import Page
 from secours_tech.load import SourceDocument, store_document
 
@@ -153,7 +154,11 @@ def test_refusal_cases_are_not_scored_on_retrieval():
 def test_fulltext_ranks_the_page_that_shares_words_with_the_question(conn):
     texts = ["Le silo stocke du grain.", "Couper le gaz avant de ventiler le local."]
     pages = tuple(Page(i, t, "text_layer", 30, 0, 0, 1.0) for i, t in enumerate(texts, start=1))
-    store_document(conn, SourceDocument("GDO-test.pdf", "a" * 64, texts, pages))
+    store_document(
+        conn,
+        SourceDocument("GDO-test.pdf", "a" * 64, texts, pages),
+        Entry("GDO", "Test", "https://example.org/GDO-test.pdf", "a" * 64),
+    )
     assert fulltext(conn)("Faut-il couper le gaz ?")[0] == ("GDO-test.pdf", 2)
     assert fulltext(conn)("???") == []
 
@@ -168,3 +173,10 @@ def test_a_frozen_test_split_cannot_be_frozen_again(tmp_path):
     main(["--cases", str(cases), "--fingerprint", str(stamp), "freeze"])
     with pytest.raises(SystemExit, match="already frozen"):
         main(["--cases", str(cases), "--fingerprint", str(stamp), "freeze"])
+
+
+def test_a_document_outside_the_manifest_is_never_retrieved(conn):
+    texts = ["Couper le gaz avant de ventiler le local."]
+    pages = (Page(1, texts[0], "text_layer", 30, 0, 0, 1.0),)
+    store_document(conn, SourceDocument("GDO-old.pdf", "b" * 64, texts, pages))  # local
+    assert fulltext(conn)("couper le gaz") == []

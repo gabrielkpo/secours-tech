@@ -327,6 +327,11 @@ def main(argv: list[str] | None = None) -> None:
         "--manifest", type=Path, default=MANIFEST, help="official sources (family, title, URL)"
     )
     parser.add_argument(
+        "--allow-local",
+        action="store_true",
+        help="also load PDFs that are not in the manifest, as local documents never retrieved",
+    )
+    parser.add_argument(
         "--reextract",
         action="store_true",
         help="extract the PDFs already loaded again (after a change to the extraction)",
@@ -342,13 +347,25 @@ def main(argv: list[str] | None = None) -> None:
     official = {}
     if args.manifest.exists():
         official = {doc.sha256: doc for doc in Manifest.load(args.manifest).documents}
-    else:
-        log.warning("no manifest at %s: guides are loaded without official URL", args.manifest)
+    elif not args.allow_local:
+        raise SystemExit(f"no manifest at {args.manifest}: nothing is loaded (see --allow-local)")
+    hashes = {pdf: sha256_of(pdf.read_bytes()) for pdf in pdfs}
+    unlisted = sorted(pdf.name for pdf, sha in hashes.items() if sha not in official)
+    if unlisted and not args.allow_local:
+        # an old edition, a truncated download or a local note must never pass for doctrine
+        raise SystemExit(
+            f"{len(unlisted)} PDF(s) not in {args.manifest} (unknown bytes), nothing is loaded:"
+            f" {', '.join(unlisted)}. Register them (collect register) or pass --allow-local."
+        )
+    for name in unlisted:
+        log.warning("%s: not in the manifest, loaded as a local document (never retrieved)", name)
     with connect() as conn:
         migrate(conn)
         for pdf in pdfs:
             data = pdf.read_bytes()
             sha = sha256_of(data)
+            if sha != hashes[pdf]:  # the bytes checked against the manifest are the bytes stored
+                raise SystemExit(f"{pdf.name} changed while loading: run the loader again")
             # check the fingerprint before parsing: a rerun skips loaded files without the
             # extraction cost
             if is_loaded(conn, sha):
