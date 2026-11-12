@@ -1,0 +1,50 @@
+name: Helm
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:  # a new push to a PR cancels its older run; every commit on main keeps its own
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  # binaries checked against their published SHA-256; bump version and checksum together
+  KIND_VERSION: v0.33.0
+  KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+  HELM_VERSION: v4.3.1
+  HELM_SHA256: 0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b
+jobs:
+  kind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install kind and helm
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSLo kind "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-amd64"
+          echo "$KIND_SHA256  kind" | sha256sum -c -
+          install -m 0755 kind "$RUNNER_TEMP/bin/kind"
+          curl -fsSLo helm.tar.gz "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  helm.tar.gz" | sha256sum -c -
+          tar -xzf helm.tar.gz linux-amd64/helm
+          install -m 0755 linux-amd64/helm "$RUNNER_TEMP/bin/helm"
+          rm -rf kind helm.tar.gz linux-amd64
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Lint
+        run: |
+          helm lint deploy/helm/secours-tech
+          helm lint deploy/helm/secours-tech --set backup.enabled=true \
+            --set backup.destinationPath=s3://bucket/path --set backup.credentialsSecret=s3
+      - name: Install on kind, migrate, upgrade, back up
+        run: ./deploy/kind/e2e.sh
+      - name: State on failure
+        if: failure()
+        run: |
+          kubectl get pods -A
+          kubectl -n secours-tech describe jobs,clusters.postgresql.cnpg.io || true
+          kubectl -n secours-tech logs job/secours-tech-migrate --all-containers || true
+          kubectl -n cnpg-system logs deploy/cnpg-cloudnative-pg --tail 100 || true

@@ -1,0 +1,34 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "secours-tech.database" . }}
+  labels:
+    {{- include "secours-tech.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.database.instances }}
+  imageName: {{ .Values.database.image }}
+  storage:
+    size: {{ .Values.database.storage.size }}
+    {{- with .Values.database.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  resources:
+    {{- toYaml .Values.database.resources | nindent 4 }}
+  # the application connects as the owner of its database, never as the superuser, whose
+  # access the operator keeps disabled (enableSuperuserAccess: false is its default)
+  enableSuperuserAccess: false
+  bootstrap:
+    initdb:
+      database: {{ .Values.database.name }}
+      owner: {{ .Values.database.owner }}
+      # the extensions need a superuser: created once here, migration 001 then finds them
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
+        - CREATE EXTENSION IF NOT EXISTS unaccent
+  {{- if .Values.backup.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ include "secours-tech.database" . }}-backup
+  {{- end }}
