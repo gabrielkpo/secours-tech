@@ -86,7 +86,10 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Official sources live in a manifest** (`corpus/sources.toml`: family, title, official URL,
   SHA-256), reviewed in PRs. The loader takes family, title and URL from it; a new file at the
   same URL becomes the next version and the previous one is marked `retired_at` (kept, so an
-  earlier citation can still be traced).
+  earlier citation can still be traced). A file with new bytes but the same text (re-signed,
+  re-exported) takes the place of the loaded edition instead; a guide with pages drawn as
+  images is fingerprinted by its file, since its text layer does not cover them. After syncing
+  with the manifest the loader fails if a guide of the manifest has no current edition.
 - **Collection is watched, not forced.** The ministry's site (securite-civile.interieur.gouv.fr)
   answers 403 to automated clients. `collect check` identifies itself as a bot and does not pose
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked

@@ -181,8 +181,9 @@ def store_document(
     """
     with conn.transaction():
         duplicate = conn.execute(
-            "SELECT id, sha256, url FROM documents WHERE sha256 = %s OR content_sha256 = %s",
-            (doc.sha256, doc.content_sha256),
+            "SELECT id, sha256, url FROM documents WHERE sha256 = %s OR content_sha256 = %s"
+            " ORDER BY sha256 = %s DESC LIMIT 1",  # the same bytes first: nothing to re-pin
+            (doc.sha256, doc.content_sha256, doc.sha256),
         ).fetchone()
         if duplicate:
             document_id, sha256, url = duplicate
@@ -194,8 +195,9 @@ def store_document(
                 (url, document_id),
             )
             conn.execute(
-                "UPDATE documents SET sha256 = %s, filename = %s, retired_at = NULL WHERE id = %s",
-                (doc.sha256, doc.filename, document_id),
+                "UPDATE documents SET sha256 = %s, filename = %s, title = %s, family = %s,"
+                " retired_at = NULL WHERE id = %s",
+                (doc.sha256, doc.filename, entry.title, entry.family, document_id),
             )
             log.info("%s: same text as the loaded edition, its new bytes pinned", doc.filename)
             return conn.execute(

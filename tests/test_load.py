@@ -362,11 +362,12 @@ def test_a_republished_file_with_the_same_text_stays_current(conn):
     url = "https://example.org/silos.pdf"
     store_document(conn, DOC, Entry("GDO", "Silos", url, DOC.sha256))
     resigned = SourceDocument(DOC.filename, "e" * 64, DOC.page_texts)
-    pinned = Entry("GDO", "Silos", url, resigned.sha256)
+    pinned = Entry("GDO", "Interventions dans les silos", url, resigned.sha256)
     assert store_document(conn, resigned, pinned) == 2  # its chunks are kept
+    assert store_document(conn, resigned, pinned) is None  # and loading it again changes nothing
     assert sync_with_manifest(conn, [pinned]) == (0, 0)
-    rows = conn.execute("SELECT sha256, retired_at IS NULL FROM documents").fetchall()
-    assert rows == [(resigned.sha256, True)]
+    rows = conn.execute("SELECT sha256, title, retired_at IS NULL FROM documents").fetchall()
+    assert rows == [(resigned.sha256, "Interventions dans les silos", True)]
 
 
 def test_a_guide_with_ocr_pages_is_fingerprinted_by_its_file():
