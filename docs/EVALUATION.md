@@ -10,8 +10,10 @@
   are never shown to a model.
 - **The set (J2).** 31 cases: 11 simple questions, 5 complex situations, 5 tasks per function,
   5 questions outside the doctrine, 3 traps and 2 medical ones. 282 excerpts back them;
-  `bench check` finds every one word for word on its PDF page and, for the 274 excerpts of
-  answered cases, in the indexed text of that page.
+  `bench check` finds every one word for word on its PDF page, and 268 of the 274 excerpts of
+  answered cases in the indexed text of that page. The other six, in one frozen test case, were
+  copied from an earlier extraction that glued words together; correcting them means freezing
+  the test split again, which is not done yet.
 - **Out of Git.** The cases quote the doctrine, whose reproduction rights are reserved, so they
   stay in `data/eval/cases/`. What is versioned: the fingerprint of the test split
   (`eval/frozen-test.sha256`), its change log (`eval/frozen-test-history.md`) and the scores of
@@ -39,17 +41,19 @@
 
 16 answered cases. Seconds per question on a laptop CPU (Apple M1, 8 GB), embedding and
 reranking included; the reranking runs shared the machine with other work, so their times are an
-upper bound. The runs without a reranker were made on the current index (commit 2100b2c, short
-fragments merged); the reranked runs on the index before (commit 87dbdbd). The five setups
-measured on both indexes score the same to two decimals: a few ranks beyond the fifth page moved.
+upper bound. The runs without a reranker were made on the current index, built with the Docker
+image (commit aa429e8); the reranked runs on an earlier index (commit 87dbdbd). Between the two,
+short fragments were merged and every guide was extracted again with the image's poppler (three
+changed): the setups measured on both score the same to two decimals, except full text (recall@20 0.50 to
+0.52, MRR 0.43 to 0.40) and hybrid with e5 (recall@20 0.69 to 0.70).
 
 | Split | Retriever | Embedding | Reranker | n | hit@5 | recall@5 | hit@20 | recall@20 | MRR | s / question | Record |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| dev | fulltext | - | - | 16 | 0.62 | 0.26 | 0.81 | 0.50 | 0.43 | 0.0 | `20261112T155914Z-dev-fulltext-none-none.json` |
-| dev | vector | `mistral-embed-2312` | - | 16 | 0.88 | 0.53 | 1.00 | 0.80 | 0.84 | 0.7 | `20261112T155925Z-dev-vector-mistral-none.json` |
-| dev | hybrid | `mistral-embed-2312` | - | 16 | 0.88 | 0.54 | 0.94 | 0.70 | 0.78 | 0.5 | `20261112T155933Z-dev-hybrid-mistral-none.json` |
-| dev | vector | `intfloat/multilingual-e5-base` | - | 16 | 0.94 | 0.61 | 0.94 | 0.74 | 0.94 | 0.2 | `20261112T155956Z-dev-vector-e5-none.json` |
-| dev | hybrid | `intfloat/multilingual-e5-base` | - | 16 | 0.94 | 0.55 | 0.94 | 0.69 | 0.86 | 0.1 | `20261112T160008Z-dev-hybrid-e5-none.json` |
+| dev | fulltext | - | - | 16 | 0.62 | 0.26 | 0.81 | 0.52 | 0.40 | 0.0 | `20261112T165428Z-dev-fulltext-none-none.json` |
+| dev | vector | `mistral-embed-2312` | - | 16 | 0.88 | 0.53 | 1.00 | 0.80 | 0.84 | 0.6 | `20261112T165438Z-dev-vector-mistral-none.json` |
+| dev | hybrid | `mistral-embed-2312` | - | 16 | 0.88 | 0.54 | 0.94 | 0.70 | 0.78 | 0.9 | `20261112T165452Z-dev-hybrid-mistral-none.json` |
+| dev | vector | `intfloat/multilingual-e5-base` | - | 16 | 0.94 | 0.61 | 0.94 | 0.74 | 0.94 | 0.2 | `20261112T165518Z-dev-vector-e5-none.json` |
+| dev | hybrid | `intfloat/multilingual-e5-base` | - | 16 | 0.94 | 0.55 | 0.94 | 0.70 | 0.86 | 0.2 | `20261112T165531Z-dev-hybrid-e5-none.json` |
 | dev | vector | `mistral-embed-2312` | `BAAI/bge-reranker-v2-m3` | 16 | 0.94 | 0.66 | 1.00 | 0.78 | 0.94 | 52.4 | `20261112T140550Z-dev-vector-mistral-bge.json` |
 | dev | vector | `mistral-embed-2312` | `BAAI/bge-m3` | 16 | 0.94 | 0.64 | 1.00 | 0.81 | 0.90 | 53.7 | `20261112T142029Z-dev-vector-mistral-m3.json` |
 | dev | hybrid | `mistral-embed-2312` | `BAAI/bge-reranker-v2-m3` | 16 | 0.94 | 0.66 | 1.00 | 0.75 | 0.91 | 49.6 | `20261112T143405Z-dev-hybrid-mistral-bge.json` |

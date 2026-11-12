@@ -1,0 +1,191 @@
+{
+  "date": "2026-11-12T16:54:28+00:00",
+  "code": {
+    "commit": "aa429e84a557ee9456e2e3cab1da6ad72d40ae04",
+    "dirty": false
+  },
+  "setup": {
+    "split": "dev",
+    "retriever": "fulltext",
+    "model": null,
+    "rerank": "none"
+  },
+  "models": {
+    "candidates": 50
+  },
+  "index": {
+    "sha256": "a9d32539d3647b9a00f3c7fe7256f0903794179c8be36b4dac056089527f554c",
+    "chunks": {
+      "ocr": 2322,
+      "text_layer": 5082
+    },
+    "ocr_engines": [
+      "mistral-ocr-4-1 text-only, raised digits marked"
+    ]
+  },
+  "cases": {
+    "split": "dev",
+    "answered": 16,
+    "sha256": "2046baffd53045ebc0a7db408b330f870fc6e58400586b79f231f115f0934394"
+  },
+  "machine": "Darwin arm64",
+  "seconds_per_question": 0.04,
+  "scores": {
+    "all": {
+      "n": 16,
+      "hit@5": 0.625,
+      "recall@5": 0.2597,
+      "all@5": 0.0625,
+      "hit@20": 0.8125,
+      "recall@20": 0.5236,
+      "all@20": 0.3125,
+      "mrr": 0.4024
+    },
+    "simple": {
+      "n": 7,
+      "hit@5": 0.5714,
+      "recall@5": 0.3571,
+      "all@5": 0.1429,
+      "hit@20": 0.8571,
+      "recall@20": 0.5952,
+      "all@20": 0.2857,
+      "mrr": 0.318
+    },
+    "complex": {
+      "n": 3,
+      "hit@5": 0.6667,
+      "recall@5": 0.0704,
+      "all@5": 0.0,
+      "hit@20": 0.6667,
+      "recall@20": 0.1444,
+      "all@20": 0.0,
+      "mrr": 0.2096
+    },
+    "function": {
+      "n": 4,
+      "hit@5": 0.5,
+      "recall@5": 0.1528,
+      "all@5": 0.0,
+      "hit@20": 0.75,
+      "recall@20": 0.5278,
+      "all@20": 0.5,
+      "mrr": 0.3958
+    },
+    "trap": {
+      "n": 1,
+      "hit@5": 1.0,
+      "recall@5": 0.5,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 1.0,
+      "all@20": 1.0,
+      "mrr": 1.0
+    },
+    "medical": {
+      "n": 1,
+      "hit@5": 1.0,
+      "recall@5": 0.3333,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 0.6667,
+      "all@20": 0.0,
+      "mrr": 1.0
+    }
+  },
+  "ranks": {
+    "Q02": [
+      15,
+      null,
+      16,
+      17,
+      18,
+      null
+    ],
+    "Q03": [
+      3,
+      null
+    ],
+    "Q05": [
+      8,
+      9
+    ],
+    "Q06": [
+      1,
+      2
+    ],
+    "Q07": [
+      null,
+      3
+    ],
+    "Q08": [
+      null,
+      3
+    ],
+    "Q12": [
+      null,
+      4,
+      null,
+      null,
+      6,
+      null,
+      null,
+      null,
+      20
+    ],
+    "Q13": [
+      23,
+      3,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "Q15": [
+      null,
+      22,
+      null,
+      null
+    ],
+    "Q16": [
+      1,
+      8
+    ],
+    "Q17": [
+      12,
+      17,
+      18
+    ],
+    "Q19": [
+      null,
+      2,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "Q20": [
+      null,
+      null
+    ],
+    "Q21": [
+      null,
+      29
+    ],
+    "Q26": [
+      1,
+      13
+    ],
+    "Q30": [
+      null,
+      17,
+      1
+    ]
+  }
+}

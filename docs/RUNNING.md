@@ -51,6 +51,17 @@ running). The bench runs from the checkout, not the container: a run's record na
 which the image does not carry. Point it at the compose database:
 `DATABASE_URL=postgresql://secours_tech:<APP_DB_PASSWORD>@localhost:5433/secours_tech uv run python -m secours_tech.bench run ...`.
 
+**The image builds the reference index.** Text extraction depends on the poppler version: on
+41 pages of one guide, poppler 26.04 (Homebrew) glued words together where the image's poppler
+(25.03, Debian) keeps them apart. The published scores come from an index loaded with the image;
+`load` and `ocr_bench` run in it, against any database (`data/raw` holding the files themselves,
+see below):
+
+```bash
+docker run --rm -e DATABASE_URL=postgresql://<user>@host.docker.internal:5432/secours_tech \
+  -v "$PWD/data:/app/data" secours-tech:local python -m secours_tech.load data/raw --reextract
+```
+
 The pipeline connects as `secours_tech`, owner of its database but not a superuser; the
 extensions are created once by `deploy/compose/initdb.sql`. `data/`, `eval/` and `corpus/` are
 mounted: `data/raw` must hold the PDF files themselves (a symbolic link to a folder outside the
