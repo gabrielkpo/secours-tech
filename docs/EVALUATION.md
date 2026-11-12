@@ -41,7 +41,7 @@
 reranking included; the reranking runs shared the machine with other work, so their times are an
 upper bound. The runs without a reranker were made on the current index (commit 2100b2c, short
 fragments merged); the reranked runs on the index before (commit 87dbdbd). The five setups
-measured on both indexes score the same.
+measured on both indexes score the same to two decimals: a few ranks beyond the fifth page moved.
 
 | Split | Retriever | Embedding | Reranker | n | hit@5 | recall@5 | hit@20 | recall@20 | MRR | s / question | Record |
 |---|---|---|---|---|---|---|---|---|---|---|---|
