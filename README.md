@@ -93,7 +93,7 @@ and limits: [docs/EVALUATION.md](docs/EVALUATION.md).
 | vector | `mistral-embed-2312` | `BAAI/bge-reranker-v2-m3` | 16 | 0.94 | 0.66 | 1.00 | 0.78 | 0.94 | 52.4 |
 | vector | `intfloat/multilingual-e5-base` | `BAAI/bge-m3` | 16 | 0.94 | 0.67 | 0.94 | 0.77 | 0.94 | 66.2 |
 
-One case is 6 points: the table ranks options, it does not prove small gaps. Vectors beat full
+One case is 6 points: the table ranks options, not small gaps. Vectors beat full
 text by far; reranking raises recall but costs tens of seconds per question on a laptop CPU, far
 above the 8 s target.
 
