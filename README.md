@@ -173,7 +173,7 @@ The OCR, embedding and evaluation steps, their costs and their `--dry-run` optio
 
 ```bash
 uv sync --locked
-pre-commit install       # ruff and gitleaks before each commit
+uv tool install pre-commit && pre-commit install   # ruff and gitleaks before each commit
 uv run pytest --cov      # coverage floor in pyproject.toml; mypy and ruff run in CI too
 ```
 
