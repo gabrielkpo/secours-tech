@@ -341,7 +341,9 @@ def main(argv: list[str] | None = None) -> None:
         migrate(conn)
         for pdf in pdfs:
             data = pdf.read_bytes()
-            sha = hashes[pdf]
+            sha = sha256_of(data)
+            if sha != hashes[pdf]:  # the bytes checked against the manifest are the bytes stored
+                raise SystemExit(f"{pdf.name} changed while loading: run the loader again")
             # check the fingerprint before parsing: a rerun skips loaded files without the
             # extraction cost
             if is_loaded(conn, sha):
