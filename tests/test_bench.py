@@ -9,11 +9,11 @@ from secours_tech.bench import (
     assign_splits,
     evaluate,
     fingerprint,
-    first_hit,
     fulltext,
     load_case,
     load_cases,
     missing_excerpts,
+    page_ranks,
     summarize,
     write_split,
 )
@@ -134,21 +134,33 @@ def test_excerpts_are_found_word_for_word_on_their_page(tmp_path, make_pdf):
     assert [(e.document, e.page) for _, e in missing] == [("guide.pdf", 1), ("guide.pdf", 9)]
 
 
-def test_recall_and_mrr_count_each_page_once():
-    case = Case("Q01", "simple", "dev", "?", False, (Excerpt("a.pdf", 7, "x"),), Path("x"))
+def test_pages_are_counted_once_in_retrieval_order():
+    excerpts = (Excerpt("a.pdf", 7, "x"), Excerpt("a.pdf", 9, "y"), Excerpt("a.pdf", 7, "z"))
+    case = Case("Q01", "simple", "dev", "?", False, excerpts, Path("x"))
     ranking = [("a.pdf", 1), ("a.pdf", 1), ("b.pdf", 2), ("a.pdf", 7)]
-    assert first_hit(case, ranking) == 3
-    assert summarize([3, None], ks=(1, 5)) == {"recall@1": 0.0, "recall@5": 0.5, "mrr": 1 / 6}
+    assert page_ranks(case, ranking) == [3, None]  # pages 7 and 9 of a.pdf
+
+
+def test_hit_recall_and_all_pages_differ_on_a_multi_page_case():
+    # case 1: 1 of its 4 pages at rank 2; case 2: both pages, at ranks 1 and 6
+    scores = summarize([[2, None, None, None], [1, 6]], ks=(5, 10))
+    assert scores == {
+        "hit@5": 1.0,
+        "recall@5": (1 / 4 + 1 / 2) / 2,
+        "all@5": 0.0,
+        "hit@10": 1.0,
+        "recall@10": (1 / 4 + 1) / 2,
+        "all@10": 0.5,
+        "mrr": (1 / 2 + 1) / 2,
+    }
 
 
 def test_refusal_cases_are_not_scored_on_retrieval():
     found = Case("Q01", "trap", "dev", "?", False, (Excerpt("a.pdf", 1, "x"),), Path("x"))
     refusal = Case("Q02", "medical", "dev", "?", True, (), Path("x"))
     scores = evaluate([found, refusal], lambda question: [("a.pdf", 1)], ks=(5,))
-    assert scores == {
-        "all": {"n": 1, "recall@5": 1.0, "mrr": 1.0},
-        "trap": {"n": 1, "recall@5": 1.0, "mrr": 1.0},
-    }
+    row = {"n": 1, "hit@5": 1.0, "recall@5": 1.0, "all@5": 1.0, "mrr": 1.0}
+    assert scores == {"all": row, "trap": row}
 
 
 def test_fulltext_ranks_the_page_that_shares_words_with_the_question(conn):
