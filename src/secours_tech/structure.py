@@ -18,11 +18,12 @@ their rank of indentation. When a guide prints nothing usable, it simply has no 
 """
 
 import re
-import subprocess
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+from secours_tech.tools import run_tool
 
 TOC_SCAN_PAGES = 25  # tables of contents sit in the first pages
 MIN_TOC_LINES = 5  # a page with fewer such lines is not a table of contents
@@ -59,12 +60,9 @@ class Section:
 
 
 def _layout_pages(pdf: Path, last: int) -> list[str]:
-    out = subprocess.run(
-        ["pdftotext", "-layout", "-l", str(last), "-enc", "UTF-8", str(pdf.resolve()), "-"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+    out = run_tool(
+        "pdftotext", "-layout", "-l", str(last), "-enc", "UTF-8", str(pdf.resolve()), "-"
+    )
     return out.split("\f")
 
 

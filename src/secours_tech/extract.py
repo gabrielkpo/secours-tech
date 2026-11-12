@@ -20,11 +20,12 @@ import itertools
 import logging
 import re
 import shutil
-import subprocess
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+from secours_tech.tools import run_tool
 
 MIN_LETTERS = 50  # below this, a page with images is treated as an image page
 MIN_TEXT_MASKS = 3  # lines of text drawn as 1-bit masks; one or two can be a logo or a pictogram
@@ -135,21 +136,12 @@ def route(letters: int, text_masks: int, images: int, quality: float) -> str:
     return "text_layer" if letters else "blank"  # a divider page with only a title keeps it
 
 
-def _run(*command: str) -> str:
-    if shutil.which(command[0]) is None:
-        raise RuntimeError(
-            f"{command[0]} not found: install poppler (brew install poppler, "
-            "or apt-get install poppler-utils)"
-        )
-    return subprocess.run(command, check=True, capture_output=True, text=True).stdout
-
-
 def _images_per_page(path: Path) -> tuple[Counter[int], Counter[int]]:
     """Images, and high-resolution 1-bit masks (lines of text drawn as images), per page."""
     images: Counter[int] = Counter()
     masks: Counter[int] = Counter()
     # columns: page num type width height color comp bpc enc interp object-id x-ppi ...
-    for line in _run("pdfimages", "-list", str(path)).splitlines()[2:]:
+    for line in run_tool("pdfimages", "-list", str(path)).splitlines()[2:]:
         cols = line.split()
         if len(cols) < 13 or not cols[0].isdigit():
             continue
@@ -162,7 +154,7 @@ def _images_per_page(path: Path) -> tuple[Counter[int], Counter[int]]:
 
 
 def _pdftotext(path: Path, *options: str) -> list[str]:
-    parts = _run("pdftotext", *options, "-enc", "UTF-8", str(path), "-").split("\f")
+    parts = run_tool("pdftotext", *options, "-enc", "UTF-8", str(path), "-").split("\f")
     if parts and parts[-1] == "":
         parts.pop()  # pdftotext ends every page, the last one included, with a form feed
     return parts
@@ -179,7 +171,7 @@ def _raised_digits(path: Path, pages: int) -> list[list[tuple[str, str]]]:
     writes them as one number ("19984"); word boxes tell them apart. Read from `pdftotext -tsv`
     (poppler 26.04 aborts on some guides in -bbox mode)."""
     words: list[list[tuple[float, float, float, float, str]]] = [[] for _ in range(pages)]
-    for row in _run("pdftotext", "-tsv", "-enc", "UTF-8", str(path), "-").splitlines()[1:]:
+    for row in run_tool("pdftotext", "-tsv", "-enc", "UTF-8", str(path), "-").splitlines()[1:]:
         cols = row.split("\t", 11)
         if len(cols) != 12 or cols[0] != "5" or not 1 <= int(cols[1]) <= pages:
             continue  # level 5 rows are words; the others are pages, blocks and lines

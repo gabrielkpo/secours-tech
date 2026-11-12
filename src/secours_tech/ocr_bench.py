@@ -16,7 +16,6 @@ text. Only the scores go into the repository.
 import argparse
 import random
 import re
-import subprocess
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +25,7 @@ from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
 from secours_tech.ingest import Chunk, chunk_text, strip_repeated_lines
 from secours_tech.load import copy_chunks, insert_sections, renumber_chunks
 from secours_tech.structure import Section, detect_headings, split_page
+from secours_tech.tools import run_tool
 
 REFERENCES = Path("data/ocr-reference")
 SAMPLES = (REFERENCES, REFERENCES / "validation")  # tuning sample, then held-out validation
@@ -361,11 +361,8 @@ def main(argv: list[str] | None = None) -> None:
                 folder.mkdir(parents=True, exist_ok=True)
                 for page in pages:
                     image = folder / f"p{page}"
-                    subprocess.run(
-                        ["pdftoppm", "-f", str(page), "-l", str(page), "-r", "150", "-png",
-                         "-singlefile", str(pdfs[filename].resolve()), str(image)],
-                        check=True,
-                    )  # fmt: skip
+                    run_tool("pdftoppm", "-f", str(page), "-l", str(page), "-r", "150", "-png",
+                             "-singlefile", str(pdfs[filename].resolve()), str(image))  # fmt: skip
                     print(f"to transcribe: {image}.png -> {image}.txt")
             return
 
