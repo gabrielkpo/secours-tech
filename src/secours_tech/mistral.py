@@ -10,6 +10,7 @@ import http.client
 import json
 import os
 import random
+import re
 import time
 import urllib.error
 import urllib.request
@@ -34,7 +35,7 @@ _OPENER = urllib.request.build_opener(_NoRedirect)
 def _wait(attempt: int, retry_after: str | None = None) -> float:
     """Seconds before the next attempt: the server's Retry-After when it gives a number of
     seconds, else exponential backoff; plus up to a second of jitter."""
-    if retry_after and retry_after.strip().isdigit():
+    if retry_after and re.fullmatch(r"[0-9]+", retry_after.strip()):
         return min(int(retry_after), 60) + random.random()  # noqa: S311 - jitter, not a secret
     return 2 ** (attempt + 1) + random.random()  # noqa: S311
 

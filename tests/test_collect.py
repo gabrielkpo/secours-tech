@@ -1,4 +1,5 @@
 import hashlib
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -131,3 +132,12 @@ def test_a_manifest_entry_off_the_official_site_or_malformed_is_refused(
 def test_fetch_refuses_a_page_off_the_official_site():
     with pytest.raises(ValueError, match="not an official page"):
         fetch("https://example.org/listing.html")
+
+
+def test_a_redirect_off_the_official_site_is_not_followed():
+    from secours_tech.collect import _OfficialOnly
+
+    handler = _OfficialOnly()
+    request = urllib.request.Request(PAGE)
+    assert handler.redirect_request(request, None, 302, "Found", {}, "https://example.org/") is None
+    assert handler.redirect_request(request, None, 302, "Found", {}, f"{BASE}/x.pdf") is not None

@@ -98,3 +98,4 @@ def test_retry_after_is_honoured_and_a_truncated_answer_is_retried(monkeypatch):
     monkeypatch.setattr(mistral.time, "sleep", waits.append)
     assert post("ocr", {}, "k") == {"ok": True}
     assert 7 <= waits[0] < 8 and len(waits) == 2
+    assert mistral._wait(0, "\u00b2") < 3  # a non-ASCII digit is not a number of seconds

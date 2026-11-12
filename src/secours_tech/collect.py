@@ -149,6 +149,16 @@ def parse_listing(html: str, page_url: str, include: str | None = None) -> list[
     return found
 
 
+class _OfficialOnly(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.startswith(OFFICIAL):
+            return None  # a redirect off the ministry's site is reported, not followed
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_OfficialOnly)
+
+
 def fetch(url: str) -> tuple[int, str | None]:
     """HTTP status and body of an official https page. The bot says who it is; a 403 is
     reported, not worked around; a page larger than MAX_PAGE is reported as unreadable."""
@@ -156,8 +166,8 @@ def fetch(url: str) -> tuple[int, str | None]:
         raise ValueError(f"not an official page: {url}")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310
     try:
-        # the URL was just checked: https on the ministry's host
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
+        # the URL was just checked, and redirects stay on the ministry's https site
+        with _OPENER.open(request, timeout=30) as response:
             body = response.read(MAX_PAGE + 1)
             if len(body) > MAX_PAGE:
                 return 0, None
