@@ -1,0 +1,47 @@
+name: Docker
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:  # a new push to a PR cancels its older run; every commit on main keeps its own
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  image:
+    # built natively on both architectures: amd64 for CI and kind, arm64 for the Oracle VM
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build
+        run: docker build -t secours-tech:local .
+      - name: Runs as an unprivileged user, with poppler and tesseract
+        run: |
+          test "$(docker run --rm secours-tech:local id -u)" = 10001
+          docker run --rm secours-tech:local sh -c 'pdftotext -v && tesseract --version' 2>&1 | head -2
+          docker run --rm secours-tech:local python -m secours_tech.load --help > /dev/null
+      - name: Migrations apply through compose, as a non-superuser
+        env:
+          COMPOSE_PROJECT_NAME: smoke
+        run: |
+          # throwaway passwords for a database that lives as long as this job
+          export POSTGRES_PASSWORD="$(openssl rand -hex 16)" APP_DB_PASSWORD="$(openssl rand -hex 16)"
+          docker compose up -d --wait db
+          docker compose up --no-build --exit-code-from migrate migrate
+          docker compose exec -T db psql -U postgres -d secours_tech -tAc \
+            "SELECT count(*) FROM schema_migrations" | grep -qx "$(ls src/secours_tech/migrations/*.sql | wc -l)"
+          docker compose exec -T db psql -U postgres -d secours_tech -tAc \
+            "SELECT rolsuper FROM pg_roles WHERE rolname = 'secours_tech'" | grep -qx f
+      - name: Logs
+        if: failure()
+        env:  # compose refuses to read its file without them; nothing is started here
+          POSTGRES_PASSWORD: unused
+          APP_DB_PASSWORD: unused
+        run: docker compose -p smoke logs

@@ -111,7 +111,8 @@ uv run pytest                                     # set TEST_DATABASE_URL to run
 ```
 
 The OCR, embedding and evaluation steps, their costs and their `--dry-run` options are in
-[docs/RUNNING.md](docs/RUNNING.md).
+[docs/RUNNING.md](docs/RUNNING.md), with the same pipeline run in Docker (`docker compose`, a
+local Postgres included).
 
 ## Roadmap
 
@@ -124,7 +125,7 @@ The OCR, embedding and evaluation steps, their costs and their `--dry-run` optio
 | J4 Generation: structured answers, citation check, refusals | next |
 | J5 App: FastAPI with rate limit, query log, minimal UI | planned |
 | J6 Collection: sources manifest, monthly watch | done; downloads stay manual |
-| J7 Production: Docker, Helm, Kubernetes, continuous deployment | planned |
+| J7 Production: Docker, Helm, Kubernetes, continuous deployment | in progress: pipeline image and local compose |
 | J8 Read-only MCP server | planned |
 | J9 Observability | planned |
 | J10 Final evaluation: 60 to 100 cases, test split scored once | planned |
@@ -140,6 +141,7 @@ The OCR, embedding and evaluation steps, their costs and their `--dry-run` optio
 | `src/secours_tech/embed.py`, `rerank.py` | Embeddings (`mistral-embed`, local `multilingual-e5-base`) and local reranking |
 | `src/secours_tech/bench.py`, `runs.py`, `eval/` | Evaluation bench, frozen test fingerprint, run records |
 | `src/secours_tech/collect.py`, `corpus/` | Official sources manifest, monthly watch, OCR gate record |
+| `Dockerfile`, `compose.yaml`, `deploy/` | Pipeline image (non-root, built for amd64 and arm64) and local stack |
 | `docs/` | Architecture, decisions, evaluation, running the pipeline |
 
 ## Data and privacy
