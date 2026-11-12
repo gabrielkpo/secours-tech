@@ -161,7 +161,7 @@ def ocr_pages(conn, filename: str) -> dict[int, str]:
         " ORDER BY p.page",
         (filename,),
     ).fetchall()
-    cleaned = strip_repeated_lines([text for _, text in rows])
+    cleaned = strip_repeated_lines([text for _, text in rows], numbers=[page for page, _ in rows])
     return {page: text for (page, _), text in zip(rows, cleaned, strict=True)}
 
 
