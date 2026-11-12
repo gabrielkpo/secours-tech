@@ -191,6 +191,57 @@ def strip_repeated_lines(
     ]
 
 
+MIN_CHUNK = 40  # characters; a shorter piece is a heading, a numbering or a stray line
+_LETTERS = re.compile(r"[^\W\d_]+")
+
+
+def merge_fragments(chunks: list[Chunk], titles: Sequence[str] = ()) -> list[Chunk]:
+    """Chunks shorter than MIN_CHUNK either go or join a neighbour, so that none is indexed as a
+    passage with nothing a citation could quote.
+
+    A fragment whose words all belong to its section title (a heading on its own, a numbering, a
+    row of bullets) goes: the title is already in the chunk's context. Any other fragment (a fiche
+    code, a photo credit, the end of a list) joins the next chunk of the same page and section,
+    else the previous one; alone in its section on the page, it stays, so no text changes
+    section.
+    """
+    out = list(chunks)
+    i = 0
+    while i < len(out):
+        chunk = out[i]
+        if len(chunk.text) >= MIN_CHUNK or len(out) == 1:
+            i += 1
+            continue
+        title = titles[chunk.section] if chunk.section is not None and titles else ""
+        words = {w.lower() for w in _LETTERS.findall(chunk.text)}
+        if words <= {w.lower() for w in _LETTERS.findall(title)}:
+            del out[i]
+            continue
+        same = [
+            j
+            for j in range(len(out))
+            if j != i and out[j].page == chunk.page and out[j].section == chunk.section
+        ]
+        after = [j for j in same if j > i]
+        before = [j for j in same if j < i]
+        if after:
+            j = after[0]
+            out[j] = Chunk(
+                chunk.document, chunk.page, f"{chunk.text} {out[j].text}", out[j].section
+            )
+            del out[i]
+        elif before:
+            j = before[-1]
+            out[j] = Chunk(
+                chunk.document, chunk.page, f"{out[j].text} {chunk.text}", out[j].section
+            )
+            del out[i]
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
 def pages_to_chunks(
     document: str,
     page_texts: list[str],
@@ -202,7 +253,7 @@ def pages_to_chunks(
 
     With the guide's sections, a page is first cut where its headings are printed, so that no
     chunk straddles two sections and each knows its own. Pages in `skip` (the table of contents)
-    give no chunk.
+    give no chunk. Fragments too short to quote are dropped or joined to a neighbour.
     """
     chunks: list[Chunk] = []
     for number, text in enumerate(strip_repeated_lines(page_texts), start=1):
@@ -215,4 +266,4 @@ def pages_to_chunks(
             chunks.extend(
                 Chunk(document, number, part, section) for part in chunk_text(piece, size)
             )
-    return chunks
+    return merge_fragments(chunks, [section.title for section in sections])

@@ -155,3 +155,22 @@ def test_a_row_of_values_ending_a_page_is_kept_even_if_one_matches_the_page_numb
 def test_footer_with_the_page_count_is_removed():
     pages = [f"Il faut {w}.\n- {i} / 6 -" for i, w in enumerate(WORDS, start=1)]
     assert strip_repeated_lines(pages) == [f"Il faut {w}." for w in WORDS]
+
+
+def test_fragments_go_or_join_a_neighbour_of_their_section():
+    from secours_tech.ingest import Chunk, merge_fragments
+
+    long = "Ventiler le local avant d'engager les équipes dans le bâtiment."
+    chunks = [
+        Chunk("d", 1, "1.4.2. Ventilation", 0),  # its section's heading on its own: goes
+        Chunk("d", 1, "AAA-BBB", 0),  # a code: joins the next chunk of its section
+        Chunk("d", 1, long, 0),
+        Chunk("d", 1, "Introduction courte.", 1),  # alone in its section: stays
+        Chunk("d", 2, long, 2),
+        Chunk("d", 2, "© Crédit photo", 2),  # last of its section: joins the previous one
+    ]
+    assert merge_fragments(chunks, ["1.4.2. Ventilation", "Chapitre 2", "Chapitre 3"]) == [
+        Chunk("d", 1, f"AAA-BBB {long}", 0),
+        Chunk("d", 1, "Introduction courte.", 1),
+        Chunk("d", 2, f"{long} © Crédit photo", 2),
+    ]
