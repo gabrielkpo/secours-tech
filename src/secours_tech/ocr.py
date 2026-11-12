@@ -183,10 +183,10 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
     return text_from_tsv(tsv)
 
 
-_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉", "01234567890123456789")
+_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻₀₁₂₃₄₅₆₇₈₉", "0123456789-0123456789")
 # raised digits right after a digit: a note mark ("2022¹⁶") or a power ("10³"), never more digits
-_RAISED_AFTER_DIGIT = re.compile(r"(?<=\d)(?:([⁰¹²³⁴⁵⁶⁷⁸⁹]+)|<sup>\s*(\d+)\s*</sup>)")
-_POWER_AFTER_DIGIT = re.compile(r"(?<=\d)\s*\}?\s*\^\s*\{?\s*(\d+)\s*\}?")
+_RAISED_AFTER_DIGIT = re.compile(r"(?<=\d)(?:(⁻?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)|<sup>\s*(-?\d+)\s*</sup>)")
+_POWER_AFTER_DIGIT = re.compile(r"(?<=\d)\s*\}?\s*\^\s*\{?\s*(-?\s*\d+)\s*\}?")
 _IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _TAG = re.compile(r"<sup>(.*?)</sup>|<sub>(.*?)</sub>")
 _TABLE_RULE = re.compile(r"^[\s|:-]+$")
@@ -198,7 +198,7 @@ _LATEX = re.compile(r"\\(?:mathrm|text|mathbf|textbf)\s*|[{}^_]")
 
 def _math_to_text(math: str) -> str:
     """Inline LaTeX as plain text; a power of a number keeps its caret (see markdown_to_text)."""
-    math = _POWER_AFTER_DIGIT.sub("\ue000\\1", math)
+    math = _POWER_AFTER_DIGIT.sub(lambda m: "\ue000" + "".join(m.group(1).split()), math)
     return _LATEX.sub("", math).replace(r"\%", "%").replace("\ue000", "^")
 
 

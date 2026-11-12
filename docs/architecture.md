@@ -100,7 +100,8 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   without its pictures (`pikepdf`: every image that is not a few-pixel text mask is removed, so
   photos, drawings and grey boxes neither hide text nor read as gibberish) and reads it with
   **Mistral OCR** (`mistral-ocr-4-1`, pinned; its Markdown is turned into plain text, superscripts
-  after a letter written inline, raised digits after a number kept apart with a caret). Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
+  after a letter written inline, raised digits after a number kept apart with a caret).
+  Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
   pages, 10 of 14 guides pass with Mistral OCR, 2 with Tesseract tuned (text-only copy, 600 dpi,
   Sauvola). On the full run, scored by `ocr_bench index`, 11 of the 14 sampled guides pass
   (`corpus/ocr-validation.toml`). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as

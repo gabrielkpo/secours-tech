@@ -187,4 +187,5 @@ def test_raised_digits_after_a_number_keep_a_caret():
         == "L'arrêté du 25 juillet 2022^16 fixe"
     )
     assert markdown_to_text("un débit de $10^{3}$ l/min") == "un débit de 10^3 l/min"
+    assert markdown_to_text("seuil de $10^{-6}$ et 10⁻³ Sv") == "seuil de 10^-6 et 10^-3 Sv"
     assert markdown_to_text("0,5 m³ et $\\mathrm{m}^{2}$") == "0,5 m3 et m2"  # units stay inline
