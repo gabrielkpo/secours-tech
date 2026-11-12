@@ -1,23 +1,24 @@
-# secrets
-.env
-# source documents and generated indexes stay out of Git (large, downloaded by script)
-data/raw/
-data/index/
-# python
+# secrets: every .env variant, except the versioned template
+.env*
+!.env.example
+# everything under data/ stays out of Git: the official PDFs (downloaded by hand), the French OCR
+# model, hand transcriptions of OCR pages and the evaluation cases quote or hold the doctrine;
+# only the fingerprint of the frozen test split is versioned (eval/frozen-test.sha256)
+data/
+# python and build output
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+# report written by `collect check --report` (corpus watch)
+report.md
 .DS_Store
 # local learning profile (VibeWise), personal to each developer
 .vibe-wise/
-# French OCR model (tessdata_best, pinned and checked by secours_tech.ocr)
-data/tessdata/
-# hand transcriptions of OCR sample pages: doctrine text, kept out of the public repository
-data/ocr-reference/
-# evaluation drafts: questions with verbatim doctrine excerpts, kept out until the set is frozen
-data/eval-draft/
-# evaluation cases (J2): expected answers quote the doctrine verbatim; only the fingerprint
-# of the frozen test split is versioned (eval/frozen-test.sha256)
-data/eval/
