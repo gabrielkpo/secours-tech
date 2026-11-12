@@ -18,13 +18,18 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field, replace
 from html.parser import HTMLParser
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-USER_AGENT = (
-    f"secours-tech-corpus-watch/{version('secours-tech')}"
-    " (+https://github.com/gabrielkpo/secours-tech)"
-)
+
+def _version() -> str:
+    try:
+        return version("secours-tech")
+    except PackageNotFoundError:  # run from a source tree that was not installed
+        return "dev"
+
+
+USER_AGENT = f"secours-tech-corpus-watch/{_version()} (+https://github.com/gabrielkpo/secours-tech)"
 OFFICIAL = "https://www.securite-civile.interieur.gouv.fr/"
 FAMILIES = ("GDO", "GTO", "PSE", "SSUAP")
 MAX_PAGE = 5_000_000  # bytes; a listing page is a few hundred kilobytes
