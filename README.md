@@ -3,40 +3,39 @@
 [![CI](https://github.com/gabrielkpo/secours-tech/actions/workflows/ci.yml/badge.svg)](https://github.com/gabrielkpo/secours-tech/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-An assistant for French firefighters that answers operational questions **only from the national
-doctrine** (GDO, GTO, SSUAP, PSE), **cites the guide and page** behind every claim, and refuses
-when the doctrine does not cover the question.
+An assistant for French firefighters, being built to answer operational questions **only from
+the national doctrine** (GDO, GTO, SSUAP, PSE), **cite the guide and page** behind every claim,
+and refuse when the doctrine does not cover the question.
 
-> **Status: early stage (milestone 1 of 12), expect breaking changes.** PDF ingestion and CI are
-> on `main`, with the Postgres index; retrieval, generation and the API are not built yet.
-> Personal project, not validated by the French civil protection: it does not replace training or
-> command. See [Status / Roadmap](#status--roadmap).
+> **Status: milestone 3 of 12, expect breaking changes.** The corpus, its OCR, the evaluation
+> set and retrieval are built and measured; answer generation, the API and the interface are
+> not built yet. Personal project, not validated by the French civil protection: it does not
+> replace training or command. See [Roadmap](#roadmap).
 
 ## Why
 
-A firefighter, trainer or trainee has a precise question ("safety perimeter around a high-voltage
-line?", "what to do in a silo?"). The answer sits in national guides of up to 400 pages, published
-as PDFs. Searching takes time; an approximate answer can be dangerous.
+A firefighter has a precise question ("safety perimeter around a high-voltage line?"). The
+answer sits in national guides of up to 400 pages, published as PDFs: searching takes time, and
+an approximate answer can be dangerous.
 
-A general-purpose LLM answers fluently but invents figures and cannot say which page it relied on.
-SecoursTech takes the opposite stance: an answer is shown only if every quoted passage is found
-**word for word** in the retrieved doctrine, otherwise it refuses and says why.
+A general-purpose LLM answers fluently but invents figures and cites no page. SecoursTech will
+show an answer only if every quoted passage is found **word for word** in the retrieved
+doctrine; otherwise it refuses and says why.
 
-**Why a rebuild.** v2 called the LLM from the browser, which exposed the API key in the JS
-bundle, and committed 170+ MB of PDFs. v3 starts over: documents stay out of Git, and the planned API keeps
-the key server-side behind a rate limit.
+**Why a rebuild.** v2 called the LLM from the browser, exposing its API key (since revoked),
+and committed 170+ MB of PDFs. v3 keeps documents out of Git and the key server-side.
 
 ## How it works
 
-Request path. Solid boxes exist on `main`; dashed boxes are the target design, not built yet.
+Solid boxes exist on `main`; dashed boxes are designed, not built.
 
 ```mermaid
 flowchart LR
-    A["Official PDFs<br/>(corpus/sources.toml)"] --> B["secours_tech.ingest<br/>text per page"]
-    B --> C["chunks<br/>(document, page, text)"]
-    C --> D[("Postgres + pgvector<br/>chunks, French full text<br/>(embeddings: next)")]
-    Q["Question"] --> G["Input guardrails<br/>length, scope"]
-    G --> R["Hybrid retrieval<br/>vectors + full text (RRF)"]
+    A["Official PDFs<br/>(corpus/sources.toml)"] --> B["load<br/>page text, routes,<br/>sections, chunks"]
+    A --> O["ocr + ocr_bench<br/>OCR of image pages,<br/>gated per guide"]
+    B --> D[("Postgres + pgvector<br/>chunks, French full text,<br/>embeddings")]
+    O --> D
+    Q["Question"] --> R["Retrieval<br/>full text, vectors, RRF"]
     D --> R
     R --> M["Mistral generation<br/>JSON: answer, citations"]
     M --> V{"Every excerpt found<br/>verbatim in the chunks?"}
@@ -44,209 +43,129 @@ flowchart LR
     V -->|no| NO["Refusal with reason"]
 
     classDef planned stroke-dasharray: 5 5
-    class G,R,M,V,OK,NO planned
+    class M,V,OK,NO planned
 ```
 
-Delivery and quality gates around the code:
+**Choices and their trade-offs**
 
-```mermaid
-flowchart LR
-    PR["Pull request"] --> RV["/security-review + /code-review"]
-    RV --> CI["CI: ruff, pytest (uv.lock),<br/>gitleaks, CodeQL, PR title"]
-    CI --> MG["Squash merge to main<br/>(protected branch)"]
-    MG --> RP["release-please:<br/>changelog + vX.Y.Z tag"]
-    MG -.-> EV["Evaluation bench:<br/>expected answers written first"]
-```
+- **Postgres + pgvector** rather than a hosted vector database: one store for the index, the
+  query log and the evaluation runs, at the cost of running Postgres ourselves.
+- **Provenance and figures preserved**: each chunk keeps its document, page and section path;
+  headers are removed by position only, and no cut or note mark alters a number.
+- **OCR gated per guide**: a guide's OCR text is indexed only if a hand-checked sample reads
+  every number right.
+- **Citation check by string equality** rather than trusting the model.
+- **Documents listed, not committed**: `corpus/sources.toml` pins each official URL and
+  SHA-256, and the loader refuses any other PDF.
 
-**Technical choices and their trade-offs**
-
-- **Postgres + pgvector rather than a hosted vector database**: one store for the index, the
-  query log and the evaluation runs, so a dashboard can join them, at the cost of running
-  Postgres ourselves. pgvector is enough for tens of thousands of chunks.
-- **Hybrid retrieval (vectors + Postgres French full text)** rather than vectors only: the
-  doctrine is full of acronyms, distances and form numbers that exact matching finds better.
-- **Chunks cut on sentence boundaries, each keeping its document and page**: a citation is only
-  possible if provenance survives ingestion. Repeated headers and footers are dropped first.
-- **Citation check by string equality** rather than trusting the model: cheap, deterministic,
-  and it also protects the integrity of the official text.
-- **Ready-made Mistral models** (`mistral-embed`, generation) rather than a fine-tuned model:
-  no training data is needed and the evaluation measures the whole system.
-- **Documents listed, not committed**: `corpus/sources.toml` records each official URL and
-  fingerprint. The ministry's site blocks bots, and the monthly watch does not pose as a browser:
-  it opens an issue, a person downloads the PDFs, `collect register` files them.
+Decisions are numbered in [docs/decisions.md](docs/decisions.md); the pipeline is detailed in
+[docs/architecture.md](docs/architecture.md).
 
 ## Example
 
-Illustrative target output. The excerpt is a real chunk produced by the current ingestion; the
-generation step that would return it does not exist yet.
+A synthetic example of the target output (the generation step does not exist yet):
 
-```text
-Question : Quel périmètre de sécurité par défaut autour d'une installation haute tension ENEDIS ?
-
+```json
 {
-  "answer": "10 mètres : c'est la zone d'exclusion par défaut que le COS met en œuvre pour une
-             installation ENEDIS haute tension (A).",
+  "question": "Quelle distance de sécurité autour de l'installation ?",
+  "answer": "25 mètres autour de l'installation, d'après le guide.",
   "citations": [
-    {
-      "document": "GDO Opérations en présence d'électricité",
-      "page": 84,
-      "excerpt": "ENEDIS Haute Tension (A) 10 mètres"
-    }
+    {"document": "Guide de doctrine (exemple)", "page": 12, "excerpt": "25 mètres"}
   ],
   "refused": false
 }
 ```
 
-## Status / Roadmap
+## Results
 
-| Milestone | Content | State |
-|---|---|---|
-| J0 Scoping | Requirements, decisions, evaluation protocol | in review |
-| J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
-| J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (hit@k, page recall@k, MRR) |
-| J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, two embeddings, hybrid RRF and two rerankers measured |
-| J4 Generation | Prompt, structured output, citation check, refusals | planned |
-| J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
-| J6 Collection | Sources manifest, monthly watch, versions | done; downloads stay manual |
-| J7 Production | Docker, server, HTTPS, CD with staging | planned |
-| J8 Public MCP | `ask_doctrine`, `search_doctrine` (read-only) | planned |
-| J9 Observability | Metrics, alerts, dashboard | planned |
-| J10 Final evaluation | 60 to 100 cases, frozen test split, results in this README | planned |
-| J11 Comparison | Same pipeline built with Mistral's managed tools (Document Library, OCR), scored on the same bench | planned |
+Retrieval on the 16 answered development cases. hit@k: an expected page among the first k;
+recall@k: the share of a case's expected pages (2 to 13) among the first k. Each row comes from a
+run record in [`eval/runs/`](eval/runs/) (commit, models, index and case fingerprints); protocol
+and limits: [docs/EVALUATION.md](docs/EVALUATION.md).
 
-**Evaluation plan.** Questions, expected facts and expected pages are drafted by Claude from the
-guide pages themselves (read straight from the PDFs, never through the system under test), each fact
-backed by a verbatim excerpt and its page, then checked and corrected case by case by a firefighter
-(the author); only validated or corrected cases enter the set. This happens **before** the system
-runs, and expected answers are never shown to the model. Each case runs 3 times. Planned measures:
-whether the right page is in the top 5 retrieved chunks, answer accuracy graded by hand, rate of
-citations that pass the equality check, correct refusals on out-of-scope questions, latency and cost
-per question. Serious faults (invented citation, figure absent from the sources, out-of-scope
-question answered, individual medical advice) must stay at 0. Baselines: the LLM alone without
-retrieval, then each retrieval variant.
+| Retriever | Embedding | Reranker | n | hit@5 | recall@5 | hit@20 | recall@20 | MRR | s / question |
+|---|---|---|---|---|---|---|---|---|---|
+| fulltext | - | - | 16 | 0.62 | 0.26 | 0.81 | 0.50 | 0.43 | 0.1 |
+| vector | `mistral-embed-2312` | - | 16 | 0.88 | 0.53 | 1.00 | 0.80 | 0.84 | 0.9 |
+| hybrid | `mistral-embed-2312` | - | 16 | 0.88 | 0.54 | 0.94 | 0.70 | 0.78 | 0.7 |
+| vector | `intfloat/multilingual-e5-base` | - | 16 | 0.94 | 0.61 | 0.94 | 0.74 | 0.94 | 0.2 |
+| hybrid | `intfloat/multilingual-e5-base` | - | 16 | 0.94 | 0.55 | 0.94 | 0.69 | 0.86 | 0.2 |
+| vector | `mistral-embed-2312` | `BAAI/bge-reranker-v2-m3` | 16 | 0.94 | 0.66 | 1.00 | 0.78 | 0.94 | 52.4 |
+| vector | `intfloat/multilingual-e5-base` | `BAAI/bge-m3` | 16 | 0.94 | 0.67 | 0.94 | 0.77 | 0.94 | 66.2 |
 
-**The bench (J2, 11/11/2026).** 31 cases, all asked as a firefighter would ask them: 11 simple
-questions, 5 complex situations, 5 tasks per function, 5 out-of-doctrine questions, 3 traps and 2
-medical ones (medication only as the PSE references allow it: prescribed, or asked for by the
-regulating doctor). 282 excerpts back the expected answers; `bench check` finds every one word
-for word on its PDF page and, for answered cases, in the indexed text of that page. 9 cases
-(30 %, drawn in every category) form the **frozen test split**, scored once at the end; the other
-22 tune the system. The cases quote the doctrine, so they stay out of Git; only the fingerprint of
-the test split is versioned (`eval/frozen-test.sha256`), the bench refuses to run if a test case
-changed, and the one correction made before any test score is logged in
-`eval/frozen-test-history.md`. First measure, full text only, on the 16 answered
-dev cases: right page in the first 5 pages for 62 % of the cases, in the first 20 for 81 %, MRR
-0.43. Embeddings and hybrid search (J3) are scored against this baseline.
-
-**Retrieval so far (J3, 11/11/2026, 16 answered dev cases).** A page counts once; the expected
-pages are those of the expected excerpts. hit@k: an expected page among the first k pages (one
-page of a case is enough); `bench run` also prints recall@k, the share of each case's pages
-found, and all@k.
-
-| Retriever | hit@5 | hit@20 | MRR |
-|---|---|---|---|
-| Full text (Postgres `fr`, any word) | 0.62 | 0.81 | 0.43 |
-| `mistral-embed` vectors (context header + text) | 0.88 | **1.00** | 0.84 |
-| Hybrid: full text + `mistral-embed`, reciprocal rank fusion (k = 60) | 0.81 | 0.94 | 0.78 |
-| `multilingual-e5-base` vectors (local reference, pinned) | **0.94** | 0.94 | **0.91** |
-| Hybrid: full text + `multilingual-e5-base` | **0.94** | 0.94 | 0.83 |
-
-On this small set the vectors alone do best: fused with equal weight, the weak full-text ranking
-pushes some right pages down. The free local model is level with `mistral-embed`: it ranks the
-right page higher (MRR 0.91 against 0.84) but misses one complex case that `mistral-embed` finds
-within 20 pages. With 16 cases one case is 6 points, so neither embedding is shown better than
-the other yet. Reranking comes below; chunk-size trials come later.
-
-**Reranking the first 50 chunks (J3, 11/11/2026, same 16 cases).** Two local models reorder the
-chunks a retriever found first: the `bge-reranker-v2-m3` cross-encoder (D11) and BGE-M3 in
-multi-vector mode (D20, one vector per token, best match per question token). Seconds per
-question on the Mac's CPU (M1, 8 GB), embedding and reranking included.
-
-| First stage | Reranker | hit@5 | hit@20 | MRR | s / question |
-|---|---|---|---|---|---|
-| `mistral-embed` vectors | `bge-reranker-v2-m3` | **0.94** | **1.00** | **0.94** | 28 |
-| `mistral-embed` vectors | BGE-M3 multi-vector | **0.94** | **1.00** | 0.90 | 17 |
-| Hybrid, `mistral-embed` | `bge-reranker-v2-m3` | 0.88 | **1.00** | 0.86 | 20 |
-| Hybrid, `mistral-embed` | BGE-M3 multi-vector | 0.88 | 0.94 | 0.89 | 20 |
-| `multilingual-e5-base` vectors | `bge-reranker-v2-m3` | **0.94** | 0.94 | 0.91 | 20 |
-| `multilingual-e5-base` vectors | BGE-M3 multi-vector | **0.94** | 0.94 | **0.94** | 18 |
-| Hybrid, `multilingual-e5-base` | `bge-reranker-v2-m3` | **0.94** | 0.94 | 0.91 | 21 |
-| Hybrid, `multilingual-e5-base` | BGE-M3 multi-vector | **0.94** | 0.94 | **0.94** | 22 |
-
-Reranking lifts every first stage; the best pair here is `mistral-embed` then
-`bge-reranker-v2-m3` (15 of 16 right pages in the first 5, all 16 in the first 20). One complex
-case stays out of the first 5 whatever the pair. On a laptop CPU, reranking 50 chunks takes 17 to
-28 s per question, far above the 8 s target of the scoping: it needs fewer chunks, the GPU, or a
-server before it can serve users.
+One case is 6 points: the table ranks options, it does not prove small gaps. Vectors beat full
+text by far; reranking raises recall but costs tens of seconds per question on a laptop CPU, far
+above the 8 s target.
 
 ## Run it
 
-Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), poppler, Tesseract (local checker), a Mistral API key in `.env` (OCR), and the official PDFs in
-`data/raw/` (not distributed here; see [Data and privacy](#data-and-privacy)).
+Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Postgres 17 with pgvector and
+unaccent, poppler, and the official PDFs listed in `corpus/sources.toml`, downloaded by hand
+(they are not distributed here).
 
 ```bash
 uv sync --locked
-createdb secours_tech                      # Postgres 17 with pgvector and unaccent
-export DATABASE_URL=postgresql:///secours_tech
-uv run python -m secours_tech.load data/raw          # text layer, page routes, sections
-uv run python -m secours_tech.ocr data/raw           # Mistral OCR of the pages routed to OCR (needs MISTRAL_API_KEY)
-uv run python -m secours_tech.ocr_bench index        # index the OCR of the guides that pass
-uv run python -m secours_tech.bench check            # every expected excerpt is on its page
-uv run python -m secours_tech.embed --model mistral  # embed the chunks (needs MISTRAL_API_KEY)
-uv run python -m secours_tech.bench run --retriever vector   # dev scores, recorded in eval/runs/
-uv run pytest                              # set TEST_DATABASE_URL to run the database tests
+createdb secours_tech && cp .env.example .env     # set DATABASE_URL (and MISTRAL_API_KEY for OCR)
+uv run python -m secours_tech.collect register ~/Downloads   # file the PDFs, check their SHA-256
+uv run python -m secours_tech.load data/raw       # text layer, page routes, sections, chunks
+uv run pytest                                     # set TEST_DATABASE_URL to run the database tests
 ```
 
-The loader applies the SQL migrations, then stores each PDF in `documents` (SHA-256, page count,
-pages without text), its pages with their route, its sections read from the printed table of
-contents (or, without one, from its headings), and its chunks in `chunks` (page, text, section and context, extraction method,
-full-text vector). Running it twice changes nothing; after a change to the extraction or the
-structure, `load data/raw --reextract` applies it to the guides already loaded. `ocr_bench index`
-needs the hand transcriptions in `data/ocr-reference/` (kept out of Git) and writes its decision
-to `corpus/ocr-validation.toml`. `bench` needs the cases in `data/eval/cases/` (kept out of Git);
-the frozen test split is scored only with `run --split test --final`. `.env.example` lists the Mistral key the next
-milestones need (server side only).
+The OCR, embedding and evaluation steps, their costs and their `--dry-run` options are in
+[docs/RUNNING.md](docs/RUNNING.md).
+
+## Roadmap
+
+| Milestone | State |
+|---|---|
+| J0 Scoping: requirements, decisions, evaluation protocol | done |
+| J1 Corpus: text per page, OCR, Postgres loader | done; 11 of 14 OCR guides indexed |
+| J2 Evaluation set: 31 cases checked by a firefighter | done; 9 frozen for the final test |
+| J3 Retrieval: embeddings, full text, fusion, reranking | measured; chunk-size trials to come |
+| J4 Generation: structured answers, citation check, refusals | next |
+| J5 App: FastAPI with rate limit, query log, minimal UI | planned |
+| J6 Collection: sources manifest, monthly watch | done; downloads stay manual |
+| J7 Production: Docker, Helm, Kubernetes, continuous deployment | planned |
+| J8 Read-only MCP server | planned |
+| J9 Observability | planned |
+| J10 Final evaluation: 60 to 100 cases, test split scored once | planned |
+| J11 The same bench on Mistral's managed tools | planned |
 
 ## Project structure
 
 | Path | Content |
 |---|---|
-| `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
-| `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
-| `src/secours_tech/bench.py`, `runs.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), hit@k, page recall@k, all@k and MRR; one scores-only record per run in `eval/runs/` |
-| `src/secours_tech/embed.py`, `rerank.py` | Chunk embeddings (`mistral-embed`, `multilingual-e5-base`) and local reranking (`bge-reranker-v2-m3`, BGE-M3 multi-vector; `--extra local`) |
-| `tests/` | Unit tests, and database tests against a dedicated `_test` database |
-| `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
-| `docs/architecture.md` | Architecture decisions |
-| `data/` | Local PDFs and generated index, ignored by Git |
-| `.github/` | CI, secret scan, CodeQL, PR title check, Dependabot, release-please |
+| `src/secours_tech/extract.py`, `structure.py`, `ingest.py` | Page text and route (text layer, OCR, blank), section tree, chunking |
+| `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the loader |
+| `src/secours_tech/ocr.py`, `ocr_bench.py`, `mistral.py` | OCR of image pages, the per-guide OCR gate, the Mistral client |
+| `src/secours_tech/embed.py`, `rerank.py` | Embeddings (`mistral-embed`, local `multilingual-e5-base`) and local reranking |
+| `src/secours_tech/bench.py`, `runs.py`, `eval/` | Evaluation bench, frozen test fingerprint, run records |
+| `src/secours_tech/collect.py`, `corpus/` | Official sources manifest, monthly watch, OCR gate record |
+| `docs/` | Architecture, decisions, evaluation, running the pipeline |
 
 ## Data and privacy
 
-- **In the repository**: code, tests and documentation only. No PDF, no extracted text.
-- **Never in the repository**: the doctrine documents, API keys (`.env` is ignored), user
-  questions.
-- **The guides** are published by the French Ministry of the Interior. They may be reproduced
-  with their source and without alteration; reproduction rights are reserved and strictly
-  limited, and commercial use is not allowed. SecoursTech therefore cites the guide and page and
-  only displays verbatim excerpts.
-- **Sent to a third party (planned)**: chunks of these public guides and the user's question go to
-  the Mistral API to build embeddings and answers. The planned query log keeps no IP address or
-  account, only an anonymous session.
+- **In the repository**: code, tests, docs, scores and fingerprints; no PDF, extracted text or
+  evaluation case (they quote the doctrine, whose reproduction rights are reserved: see
+  [License](#license)).
+- **Sent to a third party today**: the guides' image pages (Mistral OCR), the chunk texts and
+  the evaluation questions (Mistral embeddings), under Mistral's API terms; no personal data.
+  Model weights come from Hugging Face at pinned revisions.
+- **Planned**: user questions will go to the Mistral API to be answered; the query log will keep
+  no IP address or account.
 
-## Limitations / next
+## Limitations
 
-- **Four OCR guides stay uncovered.** Of the 2,993 pages of the 28 official guides, 1,192 are
-  routed to OCR and 184 are blank. In 12 guides each line of text is drawn as an image; in 2
-  more (structure fires, ULM) the text layer is garbled by a font without a ToUnicode table; the
-  rest are image pages. A guide's OCR text (Mistral OCR) is indexed only once a hand-checked
-  sample reads every number right and 99 % of the characters: 11 of the 14 OCR guides pass
-  (2,363 chunks, `corpus/ocr-validation.toml`). Structure fires and ULM each have one number
-  misread on the sample, and the dog teams guide has a 2.8 % character error rate; they stay
-  out of the index, and so do the 5 OCR pages of the PSE technical references, which have no
-  hand-checked sample yet.
-- **No answers yet.** Retrieval is measured (see above); generation and the citation check are
-  designed but not built.
+- **OCR text is checked on a sample.** 1,192 of the 2,993 pages are read by OCR. A guide's OCR
+  text is indexed only if 4 hand-checked pages read every number right and 99 % of the
+  characters: 11 of 14 guides pass, about a third of the index (`corpus/ocr-validation.toml`).
+  Four pages bound the error rate, they do not prove every number, and the citation check
+  compares answers with the OCR text: OCR-sourced figures will be flagged in answers. Structure
+  fires and ULM (a misread number, and 2.2 % of characters for ULM) and the dog teams guide
+  (2.8 % of characters) stay out of the index.
+- **A small, unpublished bench.** 16 development and 9 frozen test cases: scores can be traced
+  to their records, not rerun by others.
+- **No answers yet.** Generation and the citation check are designed but not built.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
   for an individual case.
 
@@ -254,15 +173,15 @@ milestones need (server side only).
 
 ```bash
 uv sync --locked
-uv tool install pre-commit
-pre-commit install       # ruff (through uv, locked version) and gitleaks before each commit
-uv run pytest
+pre-commit install       # ruff and gitleaks before each commit
+uv run pytest --cov      # coverage floor in pyproject.toml; mypy and ruff run in CI too
 ```
 
-One pull request per change, titled with Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`,
-`chore:`). Each PR runs `/security-review` and `/code-review` before it is opened, then CI
-(ruff, pytest, gitleaks, CodeQL, title check) on a protected `main`, and is squash-merged.
-release-please maintains the changelog and the `vX.Y.Z` tags.
+One pull request per change, titled with Conventional Commits and squash-merged into a
+protected `main`. The code is written with Claude Code under the author's direction: each pull
+request gets two automated reviews (`/security-review`, `/code-review`), recorded in the PR, and
+CI (ruff, mypy, pytest with coverage, gitleaks, CodeQL); the author, a firefighter, is the only
+human reviewer. release-please prepares releases; none has been published yet.
 
 ## License
 

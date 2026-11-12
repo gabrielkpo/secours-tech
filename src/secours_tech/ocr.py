@@ -1,8 +1,8 @@
 """OCR of the pages routed to `ocr`: Mistral OCR for the text that gets indexed, Tesseract as
 a local checker.
 
-Mistral OCR (`mistral-ocr-4-1`, pinned) reads the text that may be indexed (decision D5 revised on
-16/10/2026: on the hand-checked samples 10 of 14 guides pass with it, 2 with Tesseract). Its
+Mistral OCR (`mistral-ocr-4-1`, pinned) reads the text that may be indexed (decision D5, revised on
+2026-10-16: on the hand-checked samples 10 of 14 guides pass with it, 2 with Tesseract). Its
 Markdown is turned into plain text. Tesseract stays for one job only, offline and without a key:
 reading a page whose text layer looks garbled, so the loader can confirm it (`extract.py`); its
 text is never indexed.

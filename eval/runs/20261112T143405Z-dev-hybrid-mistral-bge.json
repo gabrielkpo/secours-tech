@@ -1,0 +1,200 @@
+{
+  "date": "2026-11-12T14:34:05+00:00",
+  "code": {
+    "commit": "87dbdbd7746191de7e18c67d966a0b8ca3b51a5b",
+    "dirty": false
+  },
+  "setup": {
+    "split": "dev",
+    "retriever": "hybrid",
+    "model": "mistral",
+    "rerank": "bge"
+  },
+  "models": {
+    "candidates": 50,
+    "rrf_k": 60,
+    "embedding": {
+      "model": "mistral-embed-2312",
+      "revision": null
+    },
+    "reranker": {
+      "model": "BAAI/bge-reranker-v2-m3",
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+    }
+  },
+  "index": {
+    "sha256": "8d2be0b51f0f537028908528653239dcc196d896b6cb5c61fd56e0fa3641f670",
+    "chunks": {
+      "ocr": 2363,
+      "text_layer": 5159
+    },
+    "ocr_engines": [
+      "mistral-ocr-4-1 text-only, raised digits marked"
+    ]
+  },
+  "cases": {
+    "split": "dev",
+    "answered": 16,
+    "sha256": "2046baffd53045ebc0a7db408b330f870fc6e58400586b79f231f115f0934394"
+  },
+  "machine": "Darwin arm64",
+  "seconds_per_question": 49.63,
+  "scores": {
+    "all": {
+      "n": 16,
+      "hit@5": 0.9375,
+      "recall@5": 0.6639,
+      "all@5": 0.4375,
+      "hit@20": 1.0,
+      "recall@20": 0.7545,
+      "all@20": 0.5,
+      "mrr": 0.9115
+    },
+    "simple": {
+      "n": 7,
+      "hit@5": 1.0,
+      "recall@5": 0.7857,
+      "all@5": 0.5714,
+      "hit@20": 1.0,
+      "recall@20": 0.881,
+      "all@20": 0.7143,
+      "mrr": 1.0
+    },
+    "complex": {
+      "n": 3,
+      "hit@5": 0.6667,
+      "recall@5": 0.2815,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 0.5426,
+      "all@20": 0.0,
+      "mrr": 0.6944
+    },
+    "function": {
+      "n": 4,
+      "hit@5": 1.0,
+      "recall@5": 0.6528,
+      "all@5": 0.5,
+      "hit@20": 1.0,
+      "recall@20": 0.6528,
+      "all@20": 0.5,
+      "mrr": 0.875
+    },
+    "trap": {
+      "n": 1,
+      "hit@5": 1.0,
+      "recall@5": 1.0,
+      "all@5": 1.0,
+      "hit@20": 1.0,
+      "recall@20": 1.0,
+      "all@20": 1.0,
+      "mrr": 1.0
+    },
+    "medical": {
+      "n": 1,
+      "hit@5": 1.0,
+      "recall@5": 0.6667,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 0.6667,
+      "all@20": 0.0,
+      "mrr": 1.0
+    }
+  },
+  "ranks": {
+    "Q02": [
+      9,
+      null,
+      1,
+      null,
+      3,
+      2
+    ],
+    "Q03": [
+      1,
+      null
+    ],
+    "Q05": [
+      1,
+      3
+    ],
+    "Q06": [
+      1,
+      2
+    ],
+    "Q07": [
+      18,
+      1
+    ],
+    "Q08": [
+      2,
+      1
+    ],
+    "Q12": [
+      13,
+      5,
+      3,
+      20,
+      1,
+      8,
+      null,
+      null,
+      2
+    ],
+    "Q13": [
+      4,
+      1,
+      null,
+      null,
+      null,
+      10,
+      null,
+      3,
+      2,
+      9
+    ],
+    "Q15": [
+      null,
+      null,
+      12,
+      23
+    ],
+    "Q16": [
+      1,
+      3
+    ],
+    "Q17": [
+      2,
+      1,
+      3
+    ],
+    "Q19": [
+      null,
+      2,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "Q20": [
+      1,
+      null
+    ],
+    "Q21": [
+      2,
+      1
+    ],
+    "Q26": [
+      1,
+      5
+    ],
+    "Q30": [
+      null,
+      5,
+      1
+    ]
+  }
+}

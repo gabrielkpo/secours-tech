@@ -3,10 +3,18 @@
 Goal: answer a question from official doctrine only, with a citation (document + page)
 for every claim, and refuse when the documents do not contain the answer.
 
+```mermaid
+flowchart LR
+    P["Official PDFs"] --> L["load: page text, routes, sections, chunks"]
+    P --> O["ocr + ocr_bench index: OCR text of the guides that pass the gate"]
+    L --> I[("Postgres: chunks, full text, embeddings")]
+    O --> I
+    Q["Question"] --> R["retrieval: full text, vectors, RRF"]
+    I --> R
+    R --> G["generation + citation check (planned)"]
 ```
-PDF (GDO/GTO/SSUAP) -> ingest -> chunks(doc, page, text) -> embeddings -> index
-question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check -> answer
-```
+
+Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
 
 ## Decisions
 - **API key server-side only.** The browser talks to our API, never to Mistral. Requests are
@@ -14,7 +22,7 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Chunks keep (document, page).** Citations are only possible if provenance survives ingestion.
 - **Citation check by equality.** Every quoted passage in an answer must appear verbatim in the
   retrieved chunks, otherwise the answer is blocked.
-- **Documents are not in Git.** They are downloaded by a script into `data/raw/`.
+- **Documents are not in Git.** A person downloads them into `data/raw/` (the site blocks bots).
 - **Evaluation first.** Expected answers are written before running the system and are never shown
   to the model. Claude drafts them from the guide pages (PDFs read directly, not through the
   system under test), with a verbatim excerpt and its page for every fact, checked by a script
@@ -66,9 +74,9 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   are mostly not found (a garbled one). Each page is cut where its headings are printed, so no
   chunk straddles two sections; each chunk gets its `section_id` and its `context`; the table
   of contents pages give no chunk. On the 28 guides: 12 have a usable table of contents (1,426
-  sections, 44 contents pages left out) and 88.5 % of the chunks have a section. A guide
+  sections, 44 contents pages left out) and 96 % of the chunks have a section (2026-11-12). A guide
   without a usable table of contents falls back on its headings (`detect_headings`): fiche
-  codes (`VEN-STR-PRO-1`, the family code above its fiches), chapter and section labels with
+  codes (codes shaped like `AAA-BBB-CCC-1`, the family code above its fiches), chapter and section labels with
   their number or letter, and dotted numbering, a number alone on its line taking the next line
   as its title; running headers are removed first. A page where fiche codes make up a third of
   the lines, or where headings followed by page numbers that only go up make up half of them,
@@ -116,7 +124,7 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   photos, drawings and grey boxes neither hide text nor read as gibberish) and reads it with
   **Mistral OCR** (`mistral-ocr-4-1`, pinned; its Markdown is turned into plain text, superscripts
   after a letter written inline, raised digits after a number kept apart with a caret).
-  Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
+  Decision D5 was revised on 2026-10-16 on measures: on the 48 hand-checked
   pages, 10 of 14 guides pass with Mistral OCR, 2 with Tesseract tuned (text-only copy, 600 dpi,
   Sauvola). On the full run, scored by `ocr_bench index`, 11 of the 14 sampled guides pass
   (`corpus/ocr-validation.toml`). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as

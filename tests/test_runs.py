@@ -47,6 +47,9 @@ def test_a_run_writes_a_record_of_scores_only(bench, capsys):
     assert "gaz" not in path.read_text(encoding="utf-8").lower()  # no doctrine text
     main(["report", str(path)])
     assert "| dev | fulltext | - | - | 1 | 1.00 | 1.00 |" in capsys.readouterr().out
+    main(["report", "--compact", str(path)])
+    out = capsys.readouterr().out
+    assert out.startswith("| Retriever |") and path.name not in out
 
 
 def test_the_test_split_is_scored_once_per_setup(bench):

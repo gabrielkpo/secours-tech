@@ -1,8 +1,8 @@
 """Evaluation bench (J2): the cases, their checks, the frozen test split and retrieval scores.
 
-Cases are written from the guide pages before the system runs (scoping §6.1, revised on
-17/10/2026): Claude drafts each one from the PDFs, never through the system under test, and the
-firefighter reviewing them validates, corrects or rejects it. They live outside Git
+Cases are written from the guide pages before the system runs (docs/EVALUATION.md): Claude
+drafts each one from the PDFs, never through the system under test, and the firefighter
+reviewing them validates, corrects or rejects it. They live outside Git
 (`data/eval/cases/<id>.toml`) because their expected answers quote the doctrine verbatim. Only
 the fingerprint of the frozen test split is versioned (`eval/frozen-test.sha256`), so anyone can
 check the test was not edited after it was frozen without the doctrine being published.
@@ -36,7 +36,7 @@ HISTORY = "frozen-test-history.md"  # next to the fingerprint
 RAW = Path("data/raw")
 CATEGORIES = ("simple", "complex", "function", "out_of_scope", "trap", "medical")
 SPLITS = ("dev", "test")
-TEST_SHARE = 0.3  # scoping §6.1: about 30 % of the cases are kept for one final run
+TEST_SHARE = 0.3  # about 30 % of the cases are kept for one final run (docs/EVALUATION.md)
 SEED = 11112026
 RRF_K = 60  # the usual constant of reciprocal rank fusion
 CANDIDATES = 50  # chunks a first stage hands to scoring or to a reranker
@@ -480,12 +480,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     report = sub.add_parser("report", help="a Markdown table of run records")
     report.add_argument("records", type=Path, nargs="+")
+    report.add_argument(
+        "--compact", action="store_true", help="leave out the split and record columns"
+    )
     args = parser.parse_args(argv)
 
     if args.command == "report":
         from secours_tech.runs import table
 
-        print(table(args.records))
+        print(table(args.records, full=not args.compact))
         return
 
     cases = load_cases(args.cases)
