@@ -18,7 +18,7 @@ build/
 dist/
 *.egg-info/
 # report written by `collect check --report` (corpus watch)
-report.md
+/report.md
 .DS_Store
 # local learning profile (VibeWise), personal to each developer
 .vibe-wise/
