@@ -1,0 +1,195 @@
+{
+  "date": "2026-11-12T15:59:25+00:00",
+  "code": {
+    "commit": "2100b2cf9988ee25f8b9822a2613142a50e9f79f",
+    "dirty": false
+  },
+  "setup": {
+    "split": "dev",
+    "retriever": "vector",
+    "model": "mistral",
+    "rerank": "none"
+  },
+  "models": {
+    "candidates": 50,
+    "embedding": {
+      "model": "mistral-embed-2312",
+      "revision": null
+    }
+  },
+  "index": {
+    "sha256": "41b0a89ecff59ab4305087fef3ccb22c1ead7d29609c386f5176d549d03efae2",
+    "chunks": {
+      "ocr": 2322,
+      "text_layer": 5079
+    },
+    "ocr_engines": [
+      "mistral-ocr-4-1 text-only, raised digits marked"
+    ]
+  },
+  "cases": {
+    "split": "dev",
+    "answered": 16,
+    "sha256": "2046baffd53045ebc0a7db408b330f870fc6e58400586b79f231f115f0934394"
+  },
+  "machine": "Darwin arm64",
+  "seconds_per_question": 0.67,
+  "scores": {
+    "all": {
+      "n": 16,
+      "hit@5": 0.875,
+      "recall@5": 0.5285,
+      "all@5": 0.25,
+      "hit@20": 1.0,
+      "recall@20": 0.8042,
+      "all@20": 0.5625,
+      "mrr": 0.8404
+    },
+    "simple": {
+      "n": 7,
+      "hit@5": 1.0,
+      "recall@5": 0.7143,
+      "all@5": 0.4286,
+      "hit@20": 1.0,
+      "recall@20": 0.881,
+      "all@20": 0.7143,
+      "mrr": 1.0
+    },
+    "complex": {
+      "n": 3,
+      "hit@5": 0.6667,
+      "recall@5": 0.2815,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 0.6593,
+      "all@20": 0.0,
+      "mrr": 0.7083
+    },
+    "function": {
+      "n": 4,
+      "hit@5": 0.75,
+      "recall@5": 0.4444,
+      "all@5": 0.25,
+      "hit@20": 1.0,
+      "recall@20": 0.6806,
+      "all@20": 0.5,
+      "mrr": 0.5804
+    },
+    "trap": {
+      "n": 1,
+      "hit@5": 1.0,
+      "recall@5": 0.5,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 1.0,
+      "all@20": 1.0,
+      "mrr": 1.0
+    },
+    "medical": {
+      "n": 1,
+      "hit@5": 1.0,
+      "recall@5": 0.3333,
+      "all@5": 0.0,
+      "hit@20": 1.0,
+      "recall@20": 1.0,
+      "all@20": 1.0,
+      "mrr": 1.0
+    }
+  },
+  "ranks": {
+    "Q02": [
+      4,
+      28,
+      1,
+      null,
+      10,
+      2
+    ],
+    "Q03": [
+      1,
+      35
+    ],
+    "Q05": [
+      1,
+      3
+    ],
+    "Q06": [
+      1,
+      2
+    ],
+    "Q07": [
+      15,
+      1
+    ],
+    "Q08": [
+      2,
+      1
+    ],
+    "Q12": [
+      5,
+      9,
+      4,
+      6,
+      1,
+      10,
+      null,
+      null,
+      3
+    ],
+    "Q13": [
+      7,
+      1,
+      19,
+      null,
+      23,
+      6,
+      null,
+      2,
+      3,
+      5
+    ],
+    "Q15": [
+      null,
+      25,
+      8,
+      9
+    ],
+    "Q16": [
+      2,
+      1
+    ],
+    "Q17": [
+      10,
+      2,
+      1
+    ],
+    "Q19": [
+      null,
+      4,
+      null,
+      null,
+      null,
+      22,
+      19,
+      null,
+      null
+    ],
+    "Q20": [
+      14,
+      null
+    ],
+    "Q21": [
+      8,
+      1
+    ],
+    "Q26": [
+      1,
+      10
+    ],
+    "Q30": [
+      17,
+      6,
+      1
+    ]
+  }
+}
