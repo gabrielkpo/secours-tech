@@ -159,6 +159,12 @@ def test_text_read_from_the_page_is_shown_as_code_and_off_site_links_apart():
     assert "Links to another site" in text and "`https://evil.example/GDO.pdf`" in text
     assert "](https://evil.example" not in text.replace("`GDO [x](https://evil.example)", "")
 
+    breakout = '<a href="/x) @octocat [free money](https://evil.example/p.pdf">GDO</a>'
+    text = check(manifest(), fetcher=lambda url: (200, breakout)).markdown()
+    (line,) = [line for line in text.splitlines() if line.startswith("- [ ] GTO")]
+    assert line.endswith("%29%20%40octocat%20%5Bfree%20money%5D%28https://evil.example/p.pdf)")
+    assert "@octocat" not in text and "[free money]" not in text
+
 
 def test_register_explains_a_refused_new_version(tmp_path: Path, make_pdf, capsys):
     from secours_tech.collect import main

@@ -203,7 +203,9 @@ class Report:
         elsewhere = [(f, t, u) for f, t, u in self.new if not u.startswith(OFFICIAL)]
         if official:
             out.append("### Guides published but not indexed")
-            out += [f"- [ ] {family}: [{_code(title)}]({url})" for family, title, url in official]
+            out += [
+                f"- [ ] {family}: [{_code(title)}]({_link(url)})" for family, title, url in official
+            ]
         if elsewhere:
             out.append("### Links to another site (not guides to download: check the page)")
             out += [f"- {family}: {_code(title)} {_code(url)}" for family, title, url in elsewhere]
@@ -221,6 +223,12 @@ def _code(text: str) -> str:
     """Text read from a web page, shown as inline code: no Markdown, link or @mention in it is
     rendered in the issue."""
     return "`" + " ".join(text.replace("`", "'").split()) + "`"
+
+
+def _link(url: str) -> str:
+    """A link destination read from a page, percent-encoded outside the characters a URL needs:
+    a ")", a space or a "[" in it cannot close the link and add Markdown after it."""
+    return urllib.parse.quote(url, safe=":/?=&%#~.-_")
 
 
 def check(manifest: Manifest, fetcher=fetch) -> Report:
