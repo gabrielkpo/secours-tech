@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import re
+from collections import Counter
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import asdict, dataclass
@@ -25,13 +26,47 @@ class Chunk:
     section: int | None = None  # index in the document's sections, None when it has none
 
 
+def _cut_at(sentence: str, size: int) -> int:
+    """Where to cut a too-long sentence: the last space that fits and does not sit between two
+    digits (French groups thousands with a space: "120 000"), else the last space that fits,
+    else -1."""
+    fallback = -1
+    cut = sentence.rfind(" ", 1, size + 1)
+    while cut > 0:
+        if not (sentence[cut - 1].isdigit() and sentence[cut + 1 : cut + 2].isdigit()):
+            return cut
+        if fallback < 0:
+            fallback = cut
+        cut = sentence.rfind(" ", 1, cut)
+    return fallback
+
+
+def _split_long(sentence: str, size: int) -> list[str]:
+    """A sentence longer than `size`, cut at a space that fits: a word or a number is never
+    split ("120 000 l" must not become "120" and "000 l"). Only a single token longer than
+    `size` is cut hard."""
+    parts: list[str] = []
+    while len(sentence) > size:
+        cut = _cut_at(sentence, size)
+        if cut <= 0:
+            cut = size  # one token longer than a chunk: no space to cut at
+            parts.append(sentence[:cut])
+            sentence = sentence[cut:]
+        else:
+            parts.append(sentence[:cut])
+            sentence = sentence[cut + 1 :]
+    if sentence:
+        parts.append(sentence)
+    return parts
+
+
 def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
     """Pack whole sentences into chunks of at most `size` characters.
 
     Cutting on sentence boundaries keeps each chunk readable on its own, which matters
     both for retrieval and for quoting. The last `overlap` sentences of a chunk are
     repeated at the start of the next one so context is not lost at the boundary.
-    A single sentence longer than `size` is split hard, as a last resort.
+    A sentence longer than `size` is cut at a space, never inside a word or a number.
     """
     if size <= 0 or overlap < 0:
         raise ValueError("size must be > 0 and overlap >= 0")
@@ -41,7 +76,7 @@ def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
 
     pieces: list[str] = []
     for sentence in _SENTENCE_END.split(text):
-        pieces.extend(sentence[i : i + size] for i in range(0, len(sentence), size))
+        pieces.extend(_split_long(sentence, size))
 
     chunks: list[str] = []
     current: list[str] = []
@@ -57,33 +92,106 @@ def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
     return chunks
 
 
-def strip_repeated_lines(pages: list[str], min_pages: int = 3, ratio: float = 0.5) -> list[str]:
-    """Remove headers and footers: short lines that appear on at least half of the pages.
+EDGE = 3  # non-empty lines at the top and at the bottom of a page that may be a header or footer
+_WORD = re.compile(r"[^\W\d_]{3,}")
+_NUMBER = re.compile(r"\d+")
+_PAGE_OF = re.compile(r"\d\s*/\s*\d")
+
+
+def _zones(lines: list[str]) -> dict[int, set[str]]:
+    """The header and footer zones each line index belongs to (a short page's line can be in
+    both); lines in the middle of the page are in none and are never removed."""
+    filled = [i for i, line in enumerate(lines) if line.strip()]
+    zones: dict[int, set[str]] = {}
+    for i in filled[:EDGE]:
+        zones.setdefault(i, set()).add("top")
+    for i in filled[-EDGE:]:
+        zones.setdefault(i, set()).add("bottom")
+    return zones
+
+
+def strip_repeated_lines(
+    pages: list[str],
+    min_pages: int = 3,
+    ratio: float = 0.5,
+    numbers: Sequence[int] | None = None,
+) -> list[str]:
+    """Remove running headers and footers, and nothing else.
+
+    Only the first and last `EDGE` non-empty lines of a page are candidates, and a line goes
+    only if the same line sits in the same zone (top or bottom) on at least half of the pages,
+    once per page: a line repeated within its page (a flowchart's "oui" and "non") is content.
+    Lines are compared by their words of three letters or more, so "Page 3" and "Page 4" count
+    as the same line, and so does an OCR'd footer next to a logo read as "@&" on one page and
+    "À\\" on the next. A line without such words but with digits goes only if it is a page
+    number: printed number minus the page's number (`numbers`, by default 1, 2, 3...) equal to
+    an offset shared by half of the pages. A table value such as "50" stays wherever it is.
 
     Only pages that have text count: pages left empty (routed to OCR, or blank) would otherwise
-    raise the threshold beyond reach in mostly-image guides. Lines are compared by their words of
-    three letters or more, so "Page 3" and "Page 4" count as the same line, and so does an OCR'd
-    footer next to a logo read as "@&" on one page and "À\\" on the next. A line without such
-    words (a bare page number) is compared with its digits masked.
+    raise the threshold beyond reach in mostly-image guides.
     """
     with_text = sum(1 for page in pages if page.strip())
     if with_text < min_pages:
         return pages
+    numbers = list(numbers) if numbers is not None else list(range(1, len(pages) + 1))
+    if len(numbers) != len(pages):
+        raise ValueError("one page number per page")
 
     def key(line: str) -> str:
-        words = re.findall(r"[^\W\d_]{3,}", line)
-        return " ".join(words) if words else re.sub(r"\d+", "#", line.strip())
+        words = _WORD.findall(line)
+        return " ".join(words) if words else line.strip()
 
-    counts: dict[str, int] = {}
-    for page in pages:
-        for k in {key(line) for line in page.splitlines() if line.strip()}:
+    def page_number(line: str) -> int | None:
+        # "12", "- 12 -" or "12/40"; a row of values such as "12 à 14" is not a page number
+        found = _NUMBER.findall(line)
+        if len(found) == 1 or (len(found) == 2 and _PAGE_OF.search(line)):
+            return int(found[0])
+        return None
+
+    split = [page.splitlines() for page in pages]
+    zoned = [_zones(lines) for lines in split]
+    once = []  # per page, the keys that occur on a single line of the page
+    for lines in split:
+        seen = Counter(key(line) for line in lines if line.strip())
+        once.append({k for k, times in seen.items() if times == 1})
+    counts: dict[tuple[str, str], int] = {}
+    offsets: dict[int, int] = {}
+    for lines, zones, number, single in zip(split, zoned, numbers, once, strict=True):
+        keys, shifts = set(), set()
+        for i, names in zones.items():
+            line = lines[i].strip()
+            if _WORD.search(line) or not _NUMBER.search(line):
+                if key(line) in single:
+                    keys.update((zone, key(line)) for zone in names)
+            elif (printed := page_number(line)) is not None:
+                shifts.add(printed - number)
+        for k in keys:
             counts[k] = counts.get(k, 0) + 1
+        for s in shifts:
+            offsets[s] = offsets.get(s, 0) + 1
     threshold = max(min_pages, ratio * with_text)
+    sequence = {shift for shift, pages_with in offsets.items() if pages_with >= threshold}
 
-    def is_boilerplate(line: str) -> bool:
-        return len(line) < 120 and counts.get(key(line), 0) >= threshold
+    def is_boilerplate(line: str, names: set[str], number: int, single: set[str]) -> bool:
+        line = line.strip()
+        if len(line) >= 120:
+            return False
+        if _WORD.search(line) or not _NUMBER.search(line):
+            k = key(line)
+            return k in single and any(counts.get((z, k), 0) >= threshold for z in names)
+        # a bare number goes only as a page number (its other occurrences on the page do not
+        # matter: tables are full of bare numbers)
+        printed = page_number(line)
+        return printed is not None and printed - number in sequence
 
-    return ["\n".join(ln for ln in p.splitlines() if not is_boilerplate(ln)) for p in pages]
+    return [
+        "\n".join(
+            line
+            for i, line in enumerate(lines)
+            if not (i in zones and is_boilerplate(line, zones[i], number, single))
+        )
+        for lines, zones, number, single in zip(split, zoned, numbers, once, strict=True)
+    ]
 
 
 def pages_to_chunks(

@@ -25,9 +25,29 @@ def test_every_sentence_is_kept():
     assert all(f"Sentence number {i}." in joined for i in range(30))
 
 
-def test_overlong_sentence_is_split_hard_and_respects_size():
+def test_a_single_token_longer_than_a_chunk_is_split_hard_and_respects_size():
     chunks = chunk_text("a" * 25, size=10)
     assert chunks == ["a" * 10, "a" * 10, "a" * 5]
+
+
+def test_overlong_sentence_is_cut_at_a_space_never_inside_a_number():
+    # a table read as one long sentence, with a number sitting on the boundary
+    text = "Réserve de " + "citerne " * 97 + "de 12 000 à 120 000 l selon le modèle"
+    chunks = chunk_text(text, size=800, overlap=0)
+    assert all(len(chunk) <= 800 for chunk in chunks)
+    assert " ".join(chunks) == " ".join(text.split())
+    tokens = set(text.split())
+    assert all(set(chunk.split()) <= tokens for chunk in chunks)
+
+
+def test_a_number_grouped_by_a_space_is_not_cut():
+    # the limit falls between "120" and "000": the cut moves before the whole number
+    text = "x" * 782 + " de 12 000 à 120 000 l selon le modèle"
+    last_space = text.rfind(" ", 0, 801)
+    assert text[last_space - 3 : last_space + 4] == "120 000"  # the naive cut splits the number
+    chunks = chunk_text(text, size=800, overlap=0)
+    assert any("120 000 l" in chunk for chunk in chunks)
+    assert not any(chunk.startswith("000") for chunk in chunks)
 
 
 def test_invalid_size_is_rejected():
@@ -75,3 +95,63 @@ def test_bare_page_numbers_are_removed():
     bodies = ["Ventiler le local.", "Couper le gaz.", "Baliser la zone.", "Éclairer."]
     pages = [f"{body}\n{i}" for i, body in enumerate(bodies, start=12)]
     assert strip_repeated_lines(pages) == bodies
+
+
+WORDS = ["ventiler", "couper", "baliser", "éclairer", "alerter", "protéger"]
+
+
+def test_table_values_alone_on_their_line_are_kept():
+    # page numbers make a bare number a frequent shape; a table value is not a page number
+    pages = [
+        f"Distance pour {w} (m)\n{10 * i + 40}\nDébit pour {w} (l/min)\n500\nFin {w}.\n{i}"
+        for i, w in enumerate(WORDS, start=1)
+    ]
+    cleaned = strip_repeated_lines(pages)
+    assert cleaned[0].splitlines() == [
+        "Distance pour ventiler (m)",
+        "50",
+        "Débit pour ventiler (l/min)",
+        "500",
+        "Fin ventiler.",
+    ]
+
+
+def test_value_at_the_bottom_that_is_not_the_page_number_is_kept():
+    pages = [f"Tableau {w}.\nDébit {w}\n{100 + 7 * i}\n{i + 3}" for i, w in enumerate(WORDS)]
+    cleaned = strip_repeated_lines(pages)
+    assert [page.splitlines()[-1] for page in cleaned] == [str(100 + 7 * i) for i in range(6)]
+
+
+def test_flowchart_answers_are_kept_and_its_header_removed():
+    pages = [
+        f"LOGIGRAMME PSE\nLa victime {w} ?\noui\nAction {w}.\nnon\nAlerter {w}.\noui\n{n}"
+        for n, w in enumerate(["respire", "parle", "saigne", "bouge", "voit", "entend"], start=1)
+    ]
+    cleaned = strip_repeated_lines(pages)
+    assert cleaned[0].splitlines() == [
+        "La victime respire ?",
+        "oui",
+        "Action respire.",
+        "non",
+        "Alerter respire.",
+        "oui",
+    ]
+
+
+def test_page_numbers_follow_the_given_page_numbers():
+    # OCR pages are a subset of the guide: their printed numbers follow their own page numbers
+    numbers = [4, 9, 10, 15]
+    pages = [f"Il faut {w}.\n{n - 2}" for w, n in zip(WORDS, numbers, strict=False)]
+    cleaned = strip_repeated_lines(pages, numbers=numbers)
+    assert cleaned == [f"Il faut {w}." for w in WORDS[:4]]
+
+
+def test_a_row_of_values_ending_a_page_is_kept_even_if_one_matches_the_page_number():
+    pages = [f"Tuyaux pour {w}.\n{i} à {i + 2}\n{i}" for i, w in enumerate(WORDS, start=1)]
+    cleaned = strip_repeated_lines(pages)
+    assert [page.splitlines()[-1] for page in cleaned] == [f"{i} à {i + 2}" for i in range(1, 7)]
+
+
+def test_footer_with_the_page_count_is_removed():
+    pages = [f"Il faut {w}.\n- {i} / 6 -" for i, w in enumerate(WORDS, start=1)]
+    assert strip_repeated_lines(pages) == [f"Il faut {w}." for w in WORDS]
