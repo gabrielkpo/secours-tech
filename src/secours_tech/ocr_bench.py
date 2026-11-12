@@ -22,7 +22,7 @@ from pathlib import Path
 
 from secours_tech.db import connect
 from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
-from secours_tech.ingest import Chunk, chunk_text, strip_repeated_lines
+from secours_tech.ingest import Chunk, chunk_text, merge_fragments, strip_repeated_lines
 from secours_tech.load import copy_chunks, insert_sections, renumber_chunks
 from secours_tech.structure import Section, detect_headings, split_page
 from secours_tech.tools import run_tool
@@ -243,13 +243,16 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             }
             # each OCR page is cut where its headings are printed, like a text page; a table of
             # contents gives no chunk
-            chunks = [
-                Chunk(filename, page, part, owner)
-                for page in pages
-                if page not in contents
-                for owner, piece in split_page(texts.get(page, ""), page, tree)
-                for part in chunk_text(piece)
-            ]
+            chunks = merge_fragments(
+                [
+                    Chunk(filename, page, part, owner)
+                    for page in pages
+                    if page not in contents
+                    for owner, piece in split_page(texts.get(page, ""), page, tree)
+                    for part in chunk_text(piece)
+                ],
+                [section.title for section in tree],
+            )
             (start,) = conn.execute(
                 "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
                 (document_id,),
