@@ -6,6 +6,7 @@ from secours_tech.extract import (
     control_chars,
     extract_pages,
     french_share,
+    mark_raised,
     route,
     text_quality,
     word_overlap,
@@ -106,3 +107,21 @@ def test_a_suspect_page_fails_loudly_without_ocr(tmp_path, monkeypatch):
     monkeypatch.setattr(ocr, "MODEL_DIR", tmp_path)  # no model there
     with pytest.raises(RuntimeError, match="needs OCR"):
         extract._is_garbled(tmp_path / "x.pdf", 1, "fgh kla mpo trs vbn qws " * 5)
+
+
+def test_a_raised_note_mark_is_set_apart_from_the_number_it_follows(make_pdf):
+    # "En 2023" then a smaller, raised "61" (text rise), then ", 3398 personnes": the plain text
+    # layer reads "202361"
+    stream = (
+        "BT /F1 12 Tf 72 720 Td (En 2023) Tj /F1 7 Tf 4 Ts (61) Tj /F1 12 Tf 0 Ts"
+        " (, 3398 personnes sont decedees sur les routes de France.) Tj ET"
+    )
+    pdf = make_pdf([stream], streams=True)
+    (page,) = extract_pages(pdf)
+    assert "En 2023^61, 3398 personnes" in page.text
+
+
+def test_mark_raised_only_touches_the_number_written_as_one():
+    text = "Lance 15021 puis lance 150 21 et 15021"
+    assert mark_raised(text, [("150", "21")]) == "Lance 150^21 puis lance 150 21 et 15021"
+    assert mark_raised("Le 1200 et 13", [("1", "2")]) == "Le 1200 et 13"  # not inside 1200

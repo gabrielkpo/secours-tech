@@ -174,3 +174,17 @@ def test_mistral_page_is_sent_without_its_pictures(tmp_path, monkeypatch, make_p
     assert result == ocr.OcrResult("Couper le gaz.", None)
     assert sent == {"path": "ocr", "model": "mistral-ocr-4-1", "key": "k"}
     assert copies == [1]
+
+
+def test_raised_digits_after_a_number_keep_a_caret():
+    from secours_tech.ocr import markdown_to_text
+
+    assert (
+        markdown_to_text("Un périmètre de 50<sup>1</sup> mètres") == "Un périmètre de 50^1 mètres"
+    )
+    assert (
+        markdown_to_text("L'arrêté du 25 juillet 2022¹⁶ fixe")
+        == "L'arrêté du 25 juillet 2022^16 fixe"
+    )
+    assert markdown_to_text("un débit de $10^{3}$ l/min") == "un débit de 10^3 l/min"
+    assert markdown_to_text("0,5 m³ et $\\mathrm{m}^{2}$") == "0,5 m3 et m2"  # units stay inline

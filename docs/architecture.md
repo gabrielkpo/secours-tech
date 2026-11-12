@@ -73,6 +73,10 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   way; the PSE flowcharts have no headings and stay without.
 - **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
   effect of OCR on retrieval and citations can be measured.
+- **A note mark never joins a number.** The plain text layer writes a raised note mark against
+  the number before it ("2023" then a small raised "61" reads "202361"); the word boxes of
+  `pdftotext -tsv` find smaller, raised digits touching a number, and the text keeps them apart
+  with a caret ("2023^61", "150^21"). OCR text follows the same rule.
 - **Each page is routed, not guessed.** `pdftotext` (poppler) reads the text layer; `pdfimages`
   counts the images and the high-resolution 1-bit masks, which is how the ministry's Word
   exports draw lines of text. A page goes to `text_layer` (enough clean letters), `ocr` (3+ text
@@ -96,7 +100,7 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   without its pictures (`pikepdf`: every image that is not a few-pixel text mask is removed, so
   photos, drawings and grey boxes neither hide text nor read as gibberish) and reads it with
   **Mistral OCR** (`mistral-ocr-4-1`, pinned; its Markdown is turned into plain text, superscripts
-  written inline). Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
+  after a letter written inline, raised digits after a number kept apart with a caret). Decision D5 was revised on 16/10/2026 on measures: on the 48 hand-checked
   pages, 10 of 14 guides pass with Mistral OCR, 2 with Tesseract tuned (text-only copy, 600 dpi,
   Sauvola). On the full run, scored by `ocr_bench index`, 11 of the 14 sampled guides pass
   (`corpus/ocr-validation.toml`). Tesseract 5 with the French `tessdata_best` model (pinned, SHA-256 checked) stays as

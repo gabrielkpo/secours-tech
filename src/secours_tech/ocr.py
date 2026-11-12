@@ -48,7 +48,7 @@ MODEL_SHA256 = "907743d98915c91a3906dfbf6e48b97598346698fe53aaa797e1a064ffcac913
 DPI = 600
 SETTINGS = "text-only 600dpi sauvola"  # stored with the text: a change of settings re-reads pages
 MISTRAL_MODEL = "mistral-ocr-4-1"  # pinned: "mistral-ocr-latest" would move under our feet
-MISTRAL_ENGINE = f"{MISTRAL_MODEL} text-only"
+MISTRAL_ENGINE = f"{MISTRAL_MODEL} text-only, raised digits marked"  # a cleanup change: read again
 
 
 @dataclass(frozen=True)
@@ -184,6 +184,9 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉", "01234567890123456789")
+# raised digits right after a digit: a note mark ("2022¹⁶") or a power ("10³"), never more digits
+_RAISED_AFTER_DIGIT = re.compile(r"(?<=\d)(?:([⁰¹²³⁴⁵⁶⁷⁸⁹]+)|<sup>\s*(\d+)\s*</sup>)")
+_POWER_AFTER_DIGIT = re.compile(r"(?<=\d)\s*\}?\s*\^\s*\{?\s*(\d+)\s*\}?")
 _IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _TAG = re.compile(r"<sup>(.*?)</sup>|<sub>(.*?)</sub>")
 _TABLE_RULE = re.compile(r"^[\s|:-]+$")
@@ -193,21 +196,32 @@ _MATH = re.compile(r"\$([^$]*)\$")
 _LATEX = re.compile(r"\\(?:mathrm|text|mathbf|textbf)\s*|[{}^_]")
 
 
+def _math_to_text(math: str) -> str:
+    """Inline LaTeX as plain text; a power of a number keeps its caret (see markdown_to_text)."""
+    math = _POWER_AFTER_DIGIT.sub("\ue000\\1", math)
+    return _LATEX.sub("", math).replace(r"\%", "%").replace("\ue000", "^")
+
+
 def markdown_to_text(markdown: str) -> str:
     """Mistral OCR's Markdown as the plain text a reader sees on the page.
 
     Pictures are dropped (they hold no text here), table pipes and rules become spaces, heading
-    marks and emphasis go, and superscripts ("accident³⁰", "m³", "$H_{2}$") become plain digits
-    written inline, as in the PDF text layer.
+    marks and emphasis go, and superscripts after a letter ("accident³⁰", "m³", "$H_{2}$") become
+    plain digits written inline, as in the PDF text layer. Raised digits after a digit are kept
+    apart with a caret ("2022¹⁶" -> "2022^16", "$10^{3}$" -> "10^3"): written inline they would
+    make another number (202216, 103).
     """
-    text = _IMAGE.sub("", markdown.translate(_SUPERSCRIPTS))
+    text = _RAISED_AFTER_DIGIT.sub(
+        lambda m: "^" + (m.group(1) or m.group(2)).translate(_SUPERSCRIPTS), markdown
+    )
+    text = _IMAGE.sub("", text.translate(_SUPERSCRIPTS))
     text = _TAG.sub(lambda m: m.group(1) or m.group(2), text)
     lines = []
     for line in text.splitlines():
         if line.strip() and _TABLE_RULE.fullmatch(line):
             continue
         line = _EMPHASIS.sub("", _HEADING.sub("", line).replace("|", " "))
-        line = _MATH.sub(lambda m: _LATEX.sub("", m.group(1)).replace(r"\%", "%"), line)
+        line = _MATH.sub(lambda m: _math_to_text(m.group(1)), line)
         lines.append(" ".join(line.split()))
     return "\n".join(lines).strip()
 

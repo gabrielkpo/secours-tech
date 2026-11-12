@@ -16,6 +16,7 @@ A text layer can be garbled in two ways that a character count does not see:
 - `blank`: no text and no image (versos, separators).
 """
 
+import itertools
 import logging
 import re
 import shutil
@@ -167,6 +168,55 @@ def _pdftotext(path: Path, *options: str) -> list[str]:
     return parts
 
 
+RAISED_HEIGHT = 0.8  # a raised mark is set smaller than the word it follows...
+RAISED_LIFT = 0.2  # ...its bottom sits above that word's bottom (share of the word's height)...
+RAISED_GAP = 0.3  # ...and it touches the word (gap as a share of the word's height)
+
+
+def _raised_digits(path: Path, pages: int) -> list[list[tuple[str, str]]]:
+    """Per page, the (word, raised digits) pairs where small raised digits touch a word ending
+    in a digit: a note mark ("2023" then "61") or a power ("10" then "3"). The plain text layer
+    writes them as one number ("202361"); word boxes tell them apart. Read from `pdftotext -tsv`
+    (poppler 26.04 aborts on some guides in -bbox mode)."""
+    words: list[list[tuple[float, float, float, float, str]]] = [[] for _ in range(pages)]
+    for row in _run("pdftotext", "-tsv", "-enc", "UTF-8", str(path), "-").splitlines()[1:]:
+        cols = row.split("\t", 11)
+        if len(cols) != 12 or cols[0] != "5" or not 1 <= int(cols[1]) <= pages:
+            continue  # level 5 rows are words; the others are pages, blocks and lines
+        left, top, width, height = map(float, cols[6:10])
+        words[int(cols[1]) - 1].append((left, top, left + width, top + height, cols[11]))
+    found = []
+    for page in words:
+        pairs = []
+        for (_, by0, bx1, by1, base), (sx0, sy0, _, sy1, mark) in itertools.pairwise(page):
+            height = by1 - by0
+            if (
+                base[-1:].isdigit()
+                and mark.isdigit()
+                and height > 0
+                and sy1 - sy0 < RAISED_HEIGHT * height
+                and by1 - sy1 > RAISED_LIFT * height
+                and abs(sx0 - bx1) < RAISED_GAP * height
+            ):
+                pairs.append((base, mark))
+        found.append(pairs)
+    return found
+
+
+def mark_raised(text: str, pairs: list[tuple[str, str]]) -> str:
+    """The page text with each raised mark set apart by a caret ("202361" -> "2023^61"), in
+    reading order; a pair not found written as one number is left alone."""
+    out, start = [], 0
+    for base, mark in pairs:
+        found = re.compile(rf"(?<!\d){re.escape(base + mark)}(?!\d)").search(text, start)
+        if found is None:
+            continue
+        cut = found.start() + len(base)
+        out.append(text[start:cut] + "^")
+        start = cut
+    return "".join(out) + text[start:]
+
+
 def _read_text(path: Path) -> list[str]:
     """Text layer of every page, split accents mended, in composed Unicode (NFC)."""
     parts = _pdftotext(path)
@@ -179,6 +229,8 @@ def _read_text(path: Path) -> list[str]:
         else:
             log.warning("%s: raw reading gives %d pages, not %d; split accents kept",
                         path.name, len(raw), len(parts))  # fmt: skip
+    raised = _raised_digits(path, len(parts))
+    parts = [mark_raised(text, pairs) for text, pairs in zip(parts, raised, strict=True)]
     # a mark NFC cannot compose is a stray doubled accent in the source ("é́"): it is dropped
     return [
         _COMBINING.sub("", unicodedata.normalize("NFC", text.translate(_DOTLESS_I)))
