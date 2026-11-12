@@ -1,0 +1,48 @@
+# Applies the SQL migrations after every install and upgrade. The database may still be
+# starting on a first install: the Job is retried (backoffLimit) until it connects.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "secours-tech.fullname" . }}-migrate
+  labels:
+    {{- include "secours-tech.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "secours-tech.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      serviceAccountName: {{ include "secours-tech.fullname" . }}
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        {{- include "secours-tech.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "secours-tech.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "secours_tech.db"]
+          env:
+            {{- include "secours-tech.databaseEnv" . | nindent 12 }}
+          securityContext:
+            {{- include "secours-tech.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          volumeMounts:
+            - name: db-ca
+              mountPath: /etc/secours-tech/db-ca
+              readOnly: true
+      volumes:
+        - name: db-ca
+          secret:
+            secretName: {{ include "secours-tech.database" . }}-ca
+            items:
+              - key: ca.crt
+                path: ca.crt

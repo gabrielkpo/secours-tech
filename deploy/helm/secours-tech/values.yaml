@@ -1,0 +1,43 @@
+# Values of the SecoursTech chart. The cluster needs, installed once and outside this chart:
+# the CloudNativePG operator and, when backup.enabled, cert-manager and the barman-cloud plugin
+# (docs/DEPLOY.md gives the pinned versions).
+
+image:
+  repository: ghcr.io/gabrielkpo/secours-tech
+  tag: ""  # defaults to the chart's appVersion
+  digest: ""  # sha256:..., preferred over the tag when set
+  pullPolicy: IfNotPresent
+
+database:
+  # one instance: one VM, one disk (D23); the daily backup leaves the VM
+  instances: 1
+  # PostgreSQL 17 with pgvector (the CloudNativePG "standard" image), pinned by digest
+  image: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie@sha256:b310491521ece4ec0f5a44008ac607352e96bff20883833d0acd833d80d26c5b
+  name: secours_tech
+  owner: secours_tech  # owns the database, not a superuser
+  storage:
+    size: 10Gi
+    storageClass: ""  # the cluster's default class when empty
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {memory: 1Gi}
+
+backup:
+  # daily base backup and continuous WAL archive to S3-compatible storage outside the VM (D23)
+  enabled: false
+  schedule: "0 0 3 * * *"  # seconds first: 03:00 every day
+  retention: 30d
+  destinationPath: ""  # s3://bucket/path
+  endpointURL: ""  # e.g. https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
+  # an existing Secret with the access key pair; it is never created by this chart
+  credentialsSecret: ""
+  accessKeyIdKey: ACCESS_KEY_ID
+  secretAccessKeyKey: ACCESS_SECRET_KEY
+
+migrations:
+  # applies the SQL migrations after every install and upgrade (a Helm hook)
+  backoffLimit: 6  # retried while the database starts
+  activeDeadlineSeconds: 900
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}

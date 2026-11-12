@@ -1,0 +1,43 @@
+{{- if .Values.backup.enabled }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ include "secours-tech.database" . }}-backup
+  labels:
+    {{- include "secours-tech.labels" . | nindent 4 }}
+spec:
+  retentionPolicy: {{ .Values.backup.retention | quote }}
+  configuration:
+    destinationPath: {{ required "backup.destinationPath is required when backup.enabled" .Values.backup.destinationPath | quote }}
+    {{- with .Values.backup.endpointURL }}
+    endpointURL: {{ . | quote }}
+    {{- end }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ required "backup.credentialsSecret is required when backup.enabled" .Values.backup.credentialsSecret }}
+        key: {{ .Values.backup.accessKeyIdKey }}
+      secretAccessKey:
+        name: {{ .Values.backup.credentialsSecret }}
+        key: {{ .Values.backup.secretAccessKeyKey }}
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "secours-tech.database" . }}-daily
+  labels:
+    {{- include "secours-tech.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  # a first base backup right away: without one, the archived WAL cannot be restored
+  immediate: true
+  backupOwnerReference: self
+  cluster:
+    name: {{ include "secours-tech.database" . }}
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

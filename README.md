@@ -125,7 +125,7 @@ local Postgres included).
 | J4 Generation: structured answers, citation check, refusals | next |
 | J5 App: FastAPI with rate limit, query log, minimal UI | planned |
 | J6 Collection: sources manifest, monthly watch | done; downloads stay manual |
-| J7 Production: Docker, Helm, Kubernetes, continuous deployment | in progress: pipeline image and local compose |
+| J7 Production: Docker, Helm, Kubernetes, continuous deployment | in progress: pipeline image, local compose, Helm chart for the database tested on kind |
 | J8 Read-only MCP server | planned |
 | J9 Observability | planned |
 | J10 Final evaluation: 60 to 100 cases, test split scored once | planned |
@@ -141,8 +141,8 @@ local Postgres included).
 | `src/secours_tech/embed.py`, `rerank.py` | Embeddings (`mistral-embed`, local `multilingual-e5-base`) and local reranking |
 | `src/secours_tech/bench.py`, `runs.py`, `eval/` | Evaluation bench, frozen test fingerprint, run records |
 | `src/secours_tech/collect.py`, `corpus/` | Official sources manifest, monthly watch, OCR gate record |
-| `Dockerfile`, `compose.yaml`, `deploy/` | Pipeline image (non-root, built for amd64 and arm64) and local stack |
-| `docs/` | Architecture, decisions, evaluation, running the pipeline |
+| `Dockerfile`, `compose.yaml`, `deploy/` | Pipeline image (non-root, built for amd64 and arm64), local stack, Helm chart and its kind test |
+| `docs/` | Architecture, decisions, evaluation, running the pipeline, deploying |
 
 ## Data and privacy
 

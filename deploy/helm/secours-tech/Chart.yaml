@@ -1,0 +1,11 @@
+apiVersion: v2
+name: secours-tech
+description: SecoursTech on Kubernetes - Postgres with pgvector (CloudNativePG), its daily backup and the schema migrations.
+type: application
+version: 0.1.0
+# the image tag defaults to appVersion; the pipeline image has no release yet
+appVersion: "0.1.0"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/gabrielkpo/secours-tech
+sources:
+  - https://github.com/gabrielkpo/secours-tech

@@ -1,0 +1,38 @@
+# A throwaway S3 endpoint (SeaweedFS) for the backup test on kind only: no data outlives the
+# cluster, so it runs without authentication. Pinned by digest (tag 4.51).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: s3}
+  template:
+    metadata:
+      labels: {app: s3}
+    spec:
+      containers:
+        - name: seaweedfs
+          image: chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8
+          args: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-volume.max=5"]
+          ports:
+            - containerPort: 8333
+          readinessProbe:
+            tcpSocket: {port: 8333}
+            periodSeconds: 3
+          volumeMounts:
+            - {name: data, mountPath: /data}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3
+spec:
+  selector: {app: s3}
+  ports:
+    - port: 8333
+      targetPort: 8333
