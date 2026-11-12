@@ -29,7 +29,7 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -37,6 +37,7 @@ from typing import Any
 import pikepdf
 
 from secours_tech.db import connect, migrate
+from secours_tech.extract import MIN_LETTERS, MIN_TEXT_MASKS
 from secours_tech.mistral import MistralError, api_key, post
 
 log = logging.getLogger(__name__)
@@ -246,12 +247,76 @@ def mistral_ocr_page(pdf: Path, page: int, key: str) -> OcrResult:
         },
         key,
     )
-    markdown = "\n".join(p.get("markdown", "") for p in answer.get("pages", []))
-    return OcrResult(markdown_to_text(markdown), None)
+    pages = answer.get("pages", [])
+    if len(pages) != 1:
+        raise MistralError(f"{pdf.name} page {page}: {len(pages)} page(s) in the OCR answer")
+    return OcrResult(markdown_to_text(pages[0].get("markdown", "")), None)
 
 
 def pdf_paths_by_sha(corpus: Path) -> dict[str, Path]:
     return {hashlib.sha256(p.read_bytes()).hexdigest(): p for p in sorted(corpus.rglob("*.pdf"))}
+
+
+# a page whose text is drawn as images (or a scan with words); an empty reading of one is a failure
+INDEXABLE_PAGE = f"(p.text_masks >= {MIN_TEXT_MASKS} OR p.letters >= {MIN_LETTERS})"
+
+
+@dataclass(frozen=True)
+class Job:
+    document: int
+    page: int
+    pdf: Path
+    indexable: bool
+
+
+def read_pages(conn, jobs: list[Job], read, engine: str, workers: int) -> dict[str, int]:
+    """Read the pages and store each text as it comes. A document's indexed OCR chunks are
+    withdrawn when its first page gets a new text (they were checked against the old one), not
+    before: a run that reads nothing withdraws nothing. A failed page, or an empty reading of a
+    page that holds text, keeps its previous text and engine, so the next run reads it again. An
+    unexpected error stops the run and cancels the pages still queued, which would be paid for
+    and thrown away."""
+    counts = {"read": 0, "failed": 0, "empty": 0, "withdrawn": 0}
+    withdrawn: set[int] = set()
+
+    def work(job: Job) -> OcrResult | None:
+        try:
+            return read(job.pdf, job.page)
+        except (subprocess.SubprocessError, MistralError, pikepdf.PdfError) as error:
+            log.warning("%s page %d: skipped (%s)", job.pdf.name, job.page, error)
+            return None
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(work, job): job for job in jobs}
+        try:
+            for done, future in enumerate(as_completed(futures), start=1):
+                job, result = futures[future], future.result()
+                if result is None:
+                    counts["failed"] += 1
+                    continue
+                if job.indexable and not result.text.strip():
+                    log.warning("%s page %d: empty reading, kept for the next run",
+                                job.pdf.name, job.page)  # fmt: skip
+                    counts["empty"] += 1
+                    continue
+                if job.document not in withdrawn:
+                    withdrawn.add(job.document)
+                    counts["withdrawn"] += conn.execute(
+                        "DELETE FROM chunks WHERE extraction = 'ocr' AND document_id = %s",
+                        (job.document,),
+                    ).rowcount
+                conn.execute(
+                    "UPDATE pages SET ocr_text = %s, ocr_confidence = %s, ocr_engine = %s,"
+                    " ocr_at = now() WHERE document_id = %s AND page = %s",
+                    (result.text, result.confidence, engine, job.document, job.page),
+                )
+                counts["read"] += 1
+                if done % 50 == 0:
+                    log.info("%d / %d pages", done, len(jobs))
+        except BaseException:
+            pool.shutdown(cancel_futures=True)
+            raise
+    return counts
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -266,6 +331,10 @@ def main(argv: list[str] | None = None) -> None:
         default="mistral",
         help="mistral for the indexed text (D5); tesseract to compare, offline",
     )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="list the pages a run would read, read none"
+    )
+    parser.add_argument("--limit", type=int, help="read at most this many pages")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -291,7 +360,7 @@ def main(argv: list[str] | None = None) -> None:
     with connect() as conn:
         migrate(conn)
         todo = conn.execute(
-            "SELECT d.id, d.sha256, d.title, p.page FROM pages p"
+            f"SELECT d.id, d.sha256, p.page, {INDEXABLE_PAGE} FROM pages p"  # noqa: S608
             " JOIN documents d ON d.id = p.document_id"
             " WHERE p.route = 'ocr' AND p.ocr_engine IS DISTINCT FROM %s"
             " AND d.retired_at IS NULL ORDER BY d.id, p.page",
@@ -300,38 +369,21 @@ def main(argv: list[str] | None = None) -> None:
         missing = {sha for _, sha, _, _ in todo if sha not in paths}
         if missing:
             log.warning("%d document(s) not found in %s, skipped", len(missing), args.corpus)
-        jobs = [(doc, page, paths[sha]) for doc, sha, _, page in todo if sha in paths]
-        log.info("%d page(s) to read", len(jobs))
-        # indexed OCR text was checked against the text being replaced: it goes until
-        # `ocr_bench index` checks the new text again
-        stale = conn.execute(
-            "DELETE FROM chunks WHERE extraction = 'ocr' AND document_id = ANY(%s)",
-            (sorted({doc for doc, _, _ in jobs}),),
-        ).rowcount
-        if stale:
-            log.warning("%d indexed OCR chunk(s) withdrawn: run ocr_bench index again", stale)
-
-        def work(job):
-            doc, page, pdf = job
-            try:
-                return doc, page, read(pdf, page)
-            except (subprocess.CalledProcessError, MistralError) as error:
-                # one unreadable page must not stop the run: it keeps its previous text and engine,
-                # so the next run reads it again
-                log.warning("%s page %d: skipped (%s)", pdf.name, page, error)
-                return doc, page, None
-
-        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-            for done, (doc, page, result) in enumerate(pool.map(work, jobs), start=1):
-                if result is None:
-                    continue
-                conn.execute(
-                    "UPDATE pages SET ocr_text = %s, ocr_confidence = %s, ocr_engine = %s,"
-                    " ocr_at = now() WHERE document_id = %s AND page = %s",
-                    (result.text, result.confidence, engine, doc, page),
-                )
-                if done % 50 == 0:
-                    log.info("%d / %d pages", done, len(jobs))
+        jobs = [Job(doc, page, paths[sha], ok) for doc, sha, page, ok in todo if sha in paths]
+        if args.limit is not None:
+            jobs = jobs[: args.limit]
+        documents = len({job.document for job in jobs})
+        log.info("%d page(s) of %d guide(s) to read with %s", len(jobs), documents, engine)
+        if args.dry_run:
+            return
+        counts = read_pages(conn, jobs, read, engine, args.workers)
+        log.info(
+            "%(read)d page(s) read, %(failed)d failed, %(empty)d empty, %(withdrawn)d indexed OCR"
+            " chunk(s) withdrawn",
+            counts,
+        )
+        if counts["withdrawn"]:
+            log.warning("run ocr_bench index again to index the new OCR text")
     log.info("done")
 
 

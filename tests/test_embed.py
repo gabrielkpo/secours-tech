@@ -107,3 +107,22 @@ def test_the_bench_refuses_vector_scores_when_chunks_lack_a_vector(conn, tmp_pat
         main([*argv, "vector"])
     embed_corpus(conn, FakeEmbedder())
     main([*argv, "hybrid", "--runs", str(tmp_path / "runs")])  # every chunk has a vector
+
+
+def test_a_dry_run_counts_the_inputs_and_sends_none(conn, monkeypatch, capsys):
+    import os
+
+    _guide(conn)
+    sent = []
+
+    class Counting(FakeEmbedder):
+        def passages(self, texts):
+            sent.extend(texts)
+            return super().passages(texts)
+
+    monkeypatch.setitem(embed.EMBEDDERS, "mistral", Counting)
+    monkeypatch.setenv("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
+    embed.main(["--model", "mistral", "--dry-run"])
+    assert "2 inputs" in capsys.readouterr().out and sent == []
+    embed.main(["--model", "mistral", "--limit", "1"])
+    assert len(sent) == 1
