@@ -66,7 +66,10 @@ def test_a_page_is_cut_where_its_headings_start():
         Section("VI-3. Carènes liquides", 3, 113, ("Chapitre 3", "VI-3. Carènes liquides")),
         Section("VI-4. Autres facteurs", 3, 113, ("Chapitre 3", "VI-4. Autres facteurs")),
     ]
-    text = "fin de la gîte.\nVI-3. Carènes liquides\nUne masse d'eau.\nVI-4. Autres facteurs\nLa stabilité."
+    text = (
+        "fin de la gîte.\nVI-3. Carènes liquides\nUne masse d'eau.\nVI-4. Autres facteurs\n"
+        "La stabilité."
+    )
     assert split_page(text, 113, sections) == [
         (0, "fin de la gîte.\n"),
         (1, "VI-3. Carènes liquides\nUne masse d'eau.\n"),

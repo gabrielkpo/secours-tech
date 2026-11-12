@@ -83,7 +83,7 @@ def index_fingerprint(conn: psycopg.Connection) -> dict:
         " WHERE d.retired_at IS NULL AND d.source = 'web' ORDER BY c.input_sha256"
     ).fetchall()
     digest = hashlib.sha256("\n".join(h for (h,) in hashes).encode()).hexdigest()
-    counts = dict(
+    counts: dict[str, int] = dict(
         conn.execute(
             "SELECT c.extraction, count(*) FROM chunks c JOIN documents d ON d.id = c.document_id"
             " WHERE d.retired_at IS NULL AND d.source = 'web' GROUP BY 1 ORDER BY 1"

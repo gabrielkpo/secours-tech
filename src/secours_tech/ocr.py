@@ -7,15 +7,16 @@ Markdown is turned into plain text. Tesseract stays for one job only, offline an
 reading a page whose text layer looks garbled, so the loader can confirm it (`extract.py`); its
 text is never indexed.
 
-Both read the same input. Each page is copied with its pictures removed: the ministry's Word exports draw every line of
-text as a tiny solid image carrying a 1-bit mask, while photos, drawings and box backgrounds are
-ordinary images. Only the text is left (grey boxes no longer hide their text, drawings no longer
-read as gibberish). The copy is rendered at 600 dpi with `pdftoppm` and read by Tesseract (LSTM
-engine, Sauvola binarisation, `fra` model from tessdata_best pinned to one commit and checked by
-SHA-256). Text (and Tesseract's mean word confidence) are stored on the page row with the engine
-and its settings; a page read with another engine or other settings is read again. Settings chosen on a hand-checked sample and validated on another one
-(`secours_tech.ocr_bench`). OCR text is not indexed here: a guide's OCR text is only
-used once its sample passes the reliability check (`secours_tech.ocr_bench`).
+Both read the same input. Each page is copied with its pictures removed: the ministry's Word
+exports draw every line of text as a tiny solid image carrying a 1-bit mask, while photos,
+drawings and box backgrounds are ordinary images. Only the text is left (grey boxes no longer
+hide their text, drawings no longer read as gibberish). The copy is rendered at 600 dpi with
+`pdftoppm` and read by Tesseract (LSTM engine, Sauvola binarisation, `fra` model from
+tessdata_best pinned to one commit and checked by SHA-256). Text (and Tesseract's mean word
+confidence) are stored on the page row with the engine and its settings; a page read with
+another engine or other settings is read again. Settings chosen on a hand-checked sample and
+validated on another one (`secours_tech.ocr_bench`). OCR text is not indexed here: a guide's OCR
+text is only used once its sample passes the reliability check (`secours_tech.ocr_bench`).
 """
 
 import argparse
@@ -31,6 +32,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pikepdf
 
@@ -111,8 +113,8 @@ def _drop_pictures(pdf: pikepdf.Pdf, owner, seen: set | None = None) -> None:
     Each form is cleaned once, even when several parents share it or it refers to itself.
     """
     seen = set() if seen is None else seen
-    dictionary = owner.obj if isinstance(owner, pikepdf.Page) else owner
-    xobjects = dictionary.get("/Resources", {}).get("/XObject", {})
+    dictionary: Any = owner.obj if isinstance(owner, pikepdf.Page) else owner
+    xobjects: Any = dictionary.get("/Resources", {}).get("/XObject", {})  # pikepdf objects
     pictures = set()
     for name, xobject in xobjects.items():
         if xobject.get("/Subtype") == "/Form":
@@ -124,9 +126,9 @@ def _drop_pictures(pdf: pikepdf.Pdf, owner, seen: set | None = None) -> None:
     if not pictures:
         return
     kept = [
-        (operands, operator)
-        for operands, operator in pikepdf.parse_content_stream(owner)
-        if not (str(operator) == "Do" and str(operands[0]) in pictures)
+        instruction
+        for instruction in pikepdf.parse_content_stream(owner)
+        if not (str(instruction.operator) == "Do" and str(instruction.operands[0]) in pictures)
     ]
     stream = pikepdf.unparse_content_stream(kept)
     if isinstance(owner, pikepdf.Page):

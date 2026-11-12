@@ -89,7 +89,10 @@ class E5Embedder:
         return self._embed([f"query: {text}"])[0]
 
 
-EMBEDDERS = {"mistral": MistralEmbedder, "e5": E5Embedder}
+EMBEDDERS: dict[str, type[MistralEmbedder] | type[E5Embedder]] = {
+    "mistral": MistralEmbedder,
+    "e5": E5Embedder,
+}
 
 
 def as_vector(values: Sequence[float]) -> str:
@@ -121,8 +124,8 @@ def embed_corpus(conn, embedder: Embedder, batch: int = BATCH) -> int:
         vectors = embedder.passages([text for _, text in part])
         with conn.transaction(), conn.cursor() as cur:
             cur.executemany(
-                "INSERT INTO embeddings (model, input_sha256, embedding) VALUES (%s, %s, %s::vector)"
-                " ON CONFLICT DO NOTHING",
+                "INSERT INTO embeddings (model, input_sha256, embedding)"
+                " VALUES (%s, %s, %s::vector) ON CONFLICT DO NOTHING",
                 [
                     (embedder.name, sha, as_vector(v))
                     for (sha, _), v in zip(part, vectors, strict=True)
