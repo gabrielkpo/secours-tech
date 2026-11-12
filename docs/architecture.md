@@ -86,7 +86,9 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Official sources live in a manifest** (`corpus/sources.toml`: family, title, official URL,
   SHA-256), reviewed in PRs. The loader takes family, title and URL from it; a new file at the
   same URL becomes the next version and the previous one is marked `retired_at` (kept, so an
-  earlier citation can still be traced).
+  earlier citation can still be traced). The loader refuses a PDF whose SHA-256 is not in the
+  manifest (an old edition, a truncated download, a local note), and loads nothing; with
+  `--allow-local` such a file is loaded as a `local` document that retrieval never returns.
 - **Collection is watched, not forced.** The ministry's site (securite-civile.interieur.gouv.fr)
   answers 403 to automated clients. `collect check` identifies itself as a bot and does not pose
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked
