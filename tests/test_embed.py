@@ -106,4 +106,4 @@ def test_the_bench_refuses_vector_scores_when_chunks_lack_a_vector(conn, tmp_pat
     with pytest.raises(SystemExit, match="have no fake vector"):
         main([*argv, "vector"])
     embed_corpus(conn, FakeEmbedder())
-    main([*argv, "hybrid"])  # every chunk has its vector: the run goes through
+    main([*argv, "hybrid", "--runs", str(tmp_path / "runs")])  # every chunk has a vector

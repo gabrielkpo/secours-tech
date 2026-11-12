@@ -191,7 +191,7 @@ uv run python -m secours_tech.ocr data/raw           # Mistral OCR of the pages 
 uv run python -m secours_tech.ocr_bench index        # index the OCR of the guides that pass
 uv run python -m secours_tech.bench check            # every expected excerpt is on its page
 uv run python -m secours_tech.embed --model mistral  # embed the chunks (needs MISTRAL_API_KEY)
-uv run python -m secours_tech.bench run --retriever vector   # retrieval scores on the dev split
+uv run python -m secours_tech.bench run --retriever vector   # dev scores, recorded in eval/runs/
 uv run pytest                              # set TEST_DATABASE_URL to run the database tests
 ```
 
@@ -211,7 +211,7 @@ milestones need (server side only).
 |---|---|
 | `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
-| `src/secours_tech/bench.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), hit@k, page recall@k, all@k and MRR |
+| `src/secours_tech/bench.py`, `runs.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), hit@k, page recall@k, all@k and MRR; one scores-only record per run in `eval/runs/` |
 | `src/secours_tech/embed.py`, `rerank.py` | Chunk embeddings (`mistral-embed`, `multilingual-e5-base`) and local reranking (`bge-reranker-v2-m3`, BGE-M3 multi-vector; `--extra local`) |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
