@@ -27,7 +27,7 @@ class Chunk:
 
 def _cut_at(sentence: str, size: int) -> int:
     """Where to cut a too-long sentence: the last space that fits and does not sit between two
-    digits (French groups thousands with a space: "180 000"), else the last space that fits,
+    digits (French groups thousands with a space: "120 000"), else the last space that fits,
     else -1."""
     fallback = -1
     cut = sentence.rfind(" ", 1, size + 1)
@@ -42,7 +42,7 @@ def _cut_at(sentence: str, size: int) -> int:
 
 def _split_long(sentence: str, size: int) -> list[str]:
     """A sentence longer than `size`, cut at a space that fits: a word or a number is never
-    split ("180 000 m3" must not become "180" and "000 m3"). Only a single token longer than
+    split ("120 000 l" must not become "120" and "000 l"). Only a single token longer than
     `size` is cut hard."""
     parts: list[str] = []
     while len(sentence) > size:

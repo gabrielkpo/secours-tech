@@ -32,7 +32,7 @@ def test_a_single_token_longer_than_a_chunk_is_split_hard_and_respects_size():
 
 def test_overlong_sentence_is_cut_at_a_space_never_inside_a_number():
     # a table read as one long sentence, with a number sitting on the boundary
-    text = "Volume de " + "stockage " * 87 + "de 10 000 à 180 000 m3 selon les cellules"
+    text = "Réserve de " + "citerne " * 97 + "de 12 000 à 120 000 l selon le modèle"
     chunks = chunk_text(text, size=800, overlap=0)
     assert all(len(chunk) <= 800 for chunk in chunks)
     assert " ".join(chunks) == " ".join(text.split())
@@ -41,12 +41,12 @@ def test_overlong_sentence_is_cut_at_a_space_never_inside_a_number():
 
 
 def test_a_number_grouped_by_a_space_is_not_cut():
-    # the limit falls between "180" and "000": the cut moves before the whole number
-    text = "x" * 782 + " de 10 000 à 180 000 m3 selon les cellules"
+    # the limit falls between "120" and "000": the cut moves before the whole number
+    text = "x" * 782 + " de 12 000 à 120 000 l selon le modèle"
     last_space = text.rfind(" ", 0, 801)
-    assert text[last_space - 3 : last_space + 4] == "180 000"  # the naive cut splits the number
+    assert text[last_space - 3 : last_space + 4] == "120 000"  # the naive cut splits the number
     chunks = chunk_text(text, size=800, overlap=0)
-    assert any("180 000 m3" in chunk for chunk in chunks)
+    assert any("120 000 l" in chunk for chunk in chunks)
     assert not any(chunk.startswith("000") for chunk in chunks)
 
 
