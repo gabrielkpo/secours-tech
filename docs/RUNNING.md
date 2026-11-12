@@ -54,7 +54,8 @@ which the image does not carry. Point it at the compose database:
 **The image builds the reference index.** Text extraction depends on the poppler version: on
 41 pages of one guide, poppler 26.04 (Homebrew) glued words together where the image's poppler
 (25.03, Debian) keeps them apart. The published scores come from an index loaded with the image;
-`load` and `ocr_bench` run in it, against any database:
+`load` and `ocr_bench` run in it, against any database (`data/raw` holding the files themselves,
+see below):
 
 ```bash
 docker run --rm -e DATABASE_URL=postgresql://<user>@host.docker.internal:5432/secours_tech \

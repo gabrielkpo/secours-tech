@@ -10,8 +10,10 @@
   are never shown to a model.
 - **The set (J2).** 31 cases: 11 simple questions, 5 complex situations, 5 tasks per function,
   5 questions outside the doctrine, 3 traps and 2 medical ones. 282 excerpts back them;
-  `bench check` finds every one word for word on its PDF page and, for the 274 excerpts of
-  answered cases, in the indexed text of that page.
+  `bench check` finds every one word for word on its PDF page, and 268 of the 274 excerpts of
+  answered cases in the indexed text of that page. The other six, in one frozen test case, were
+  copied from an earlier extraction that glued words together; correcting them means freezing
+  the test split again, which is not done yet.
 - **Out of Git.** The cases quote the doctrine, whose reproduction rights are reserved, so they
   stay in `data/eval/cases/`. What is versioned: the fingerprint of the test split
   (`eval/frozen-test.sha256`), its change log (`eval/frozen-test-history.md`) and the scores of
@@ -41,8 +43,8 @@
 reranking included; the reranking runs shared the machine with other work, so their times are an
 upper bound. The runs without a reranker were made on the current index, built with the Docker
 image (commit aa429e8); the reranked runs on an earlier index (commit 87dbdbd). Between the two,
-short fragments were merged and three guides were extracted again with the image's poppler: the
-setups measured on both score the same to two decimals, except full text (recall@20 0.50 to
+short fragments were merged and every guide was extracted again with the image's poppler (three
+changed): the setups measured on both score the same to two decimals, except full text (recall@20 0.50 to
 0.52, MRR 0.43 to 0.40) and hybrid with e5 (recall@20 0.69 to 0.70).
 
 | Split | Retriever | Embedding | Reranker | n | hit@5 | recall@5 | hit@20 | recall@20 | MRR | s / question | Record |
