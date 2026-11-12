@@ -28,6 +28,7 @@ from pathlib import Path
 
 CASES = Path("data/eval/cases")
 FINGERPRINT = Path("eval/frozen-test.sha256")
+RUNS = Path("eval/runs")
 RAW = Path("data/raw")
 CATEGORIES = ("simple", "complex", "function", "out_of_scope", "trap", "medical")
 SPLITS = ("dev", "test")
@@ -188,10 +189,10 @@ def write_split(case: Case, split: str) -> None:
     case.path.write_text(new, encoding="utf-8")
 
 
-def fingerprint(cases: Sequence[Case]) -> str:
-    """SHA-256 of the test cases, file name and bytes, in name order."""
+def fingerprint(cases: Sequence[Case], split: str = "test") -> str:
+    """SHA-256 of the cases of a split, file name and bytes, in name order."""
     digest = hashlib.sha256()
-    for case in sorted((c for c in cases if c.split == "test"), key=lambda c: c.id):
+    for case in sorted((c for c in cases if c.split == split), key=lambda c: c.id):
         digest.update(case.path.name.encode() + b"\0" + case.path.read_bytes() + b"\0")
     return digest.hexdigest()
 
@@ -243,19 +244,31 @@ def summarize(
     return scores
 
 
+def rank_cases(cases: Sequence[Case], retriever: Retriever) -> dict[str, list[int | None]]:
+    """The ranks of each answered case's expected pages, by case id. Refusal cases have no page
+    to find: they are scored when answers are generated (J4), not here."""
+    return {
+        case.id: page_ranks(case, retriever(case.question)) for case in cases if not case.refusal
+    }
+
+
+def score(
+    cases: Sequence[Case], ranks: dict[str, list[int | None]], ks: Sequence[int] = (5, 20)
+) -> dict[str, dict[str, float]]:
+    """Scores over the ranked cases, all together and per category."""
+    groups: dict[str, list[list[int | None]]] = {}
+    for case in cases:
+        if case.id in ranks:
+            groups.setdefault("all", []).append(ranks[case.id])
+            groups.setdefault(case.category, []).append(ranks[case.id])
+    return {group: {"n": len(r), **summarize(r, ks)} for group, r in groups.items()}
+
+
 def evaluate(
     cases: Sequence[Case], retriever: Retriever, ks: Sequence[int] = (5, 20)
 ) -> dict[str, dict[str, float]]:
-    """Scores over the answered cases, all together and per category. Refusal cases have no
-    page to find: they are scored when answers are generated (J4), not here."""
-    ranks: dict[str, list[list[int | None]]] = {}
-    for case in cases:
-        if case.refusal:
-            continue
-        found = page_ranks(case, retriever(case.question))
-        ranks.setdefault("all", []).append(found)
-        ranks.setdefault(case.category, []).append(found)
-    return {group: {"n": len(r), **summarize(r, ks)} for group, r in ranks.items()}
+    """Scores over the answered cases, all together and per category."""
+    return score(cases, rank_cases(cases, retriever), ks)
 
 
 def _fulltext_chunks(conn, question: str, limit: int) -> list[tuple[int, str, int]]:
@@ -385,7 +398,21 @@ def main(argv: list[str] | None = None) -> None:
     run.add_argument(
         "--final", action="store_true", help="required to score the frozen test split, once"
     )
+    run.add_argument(
+        "--runs", type=Path, default=RUNS, help="folder of the run records (scores only)"
+    )
+    run.add_argument(
+        "--force", action="store_true", help="score the test split again with the same setup"
+    )
+    report = sub.add_parser("report", help="a Markdown table of run records")
+    report.add_argument("records", type=Path, nargs="+")
     args = parser.parse_args(argv)
+
+    if args.command == "report":
+        from secours_tech.runs import table
+
+        print(table(args.records))
+        return
 
     cases = load_cases(args.cases)
     frozen = frozen_fingerprint(args.fingerprint)
@@ -427,6 +454,13 @@ def main(argv: list[str] | None = None) -> None:
             return
         if args.split == "test" and not args.final:
             raise SystemExit("the test split is scored once, at the end: pass --final")
+        from secours_tech.runs import Setup, earlier_final, record, write
+
+        setup = Setup(args.split, args.retriever, None, args.rerank)
+        if args.retriever != "fulltext":
+            setup = Setup(args.split, args.retriever, args.model, args.rerank)
+        if args.split == "test" and not args.force and (done := earlier_final(args.runs, setup)):
+            raise SystemExit(f"the test split was already scored with this setup ({done})")
         chosen = [case for case in cases if case.split == args.split]
         embedder = None
         if args.retriever != "fulltext":
@@ -453,9 +487,15 @@ def main(argv: list[str] | None = None) -> None:
 
             retriever = reranked(conn, candidates, RERANKERS[args.rerank]())
         started = time.perf_counter()
-        scores = evaluate(chosen, retriever, args.k)
-        answered = sum(not case.refusal for case in chosen)
-        print(f"{(time.perf_counter() - started) / max(answered, 1):.2f} s per question")
+        ranks = rank_cases(chosen, retriever)
+        seconds = (time.perf_counter() - started) / max(len(ranks), 1)
+        scores = score(chosen, ranks, args.k)
+        print(f"{seconds:.2f} s per question")
+        path = write(
+            args.runs,
+            record(conn, setup, fingerprint(cases, args.split), ranks, scores, seconds),
+        )
+        print(f"record written to {path}")
         for group in ["all", *CATEGORIES]:
             if group in scores:
                 row = scores[group]

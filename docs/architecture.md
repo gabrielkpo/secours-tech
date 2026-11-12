@@ -30,6 +30,10 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   recall@k (share of the expected pages among the first k), all@k (every expected page among
   the first k) and MRR (first expected page); refusal cases are left to the answer scores of
   J4. hit@k alone overstates retrieval on multi-page cases: one page of thirteen is a hit.
+  Every `bench run` writes a record to `eval/runs/` (scores only, never doctrine text): commit,
+  models and revisions, a fingerprint of the indexed chunks and of the cases, scores per
+  category, seconds per question and the ranks per case id. Published tables come from these
+  records (`bench report`), and the test split is scored once per setup.
 - **Embeddings are stored per model and per input, not per chunk.** What a model embeds is the
   chunk's context header and its text (`chunk_input()` in SQL, D7); `chunks.input_sha256` is its
   hash, computed by Postgres, and `embeddings` is keyed by (model, hash). Rebuilding the chunks
