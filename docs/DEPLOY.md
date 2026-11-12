@@ -26,8 +26,8 @@ The plugin is needed only with `backup.enabled`.
   (`sslmode=verify-full`). Its password comes from the operator's secret. It runs as uid 10001
   with a read-only root filesystem, no capabilities and no Kubernetes API token.
 - With `backup.enabled`: a barman-cloud `ObjectStore` (gzip, retention `backup.retention`) and a
-  `ScheduledBackup` (03:00 every day). WAL is archived continuously, so the database can be
-  restored to any point within the retention.
+  `ScheduledBackup` (03:00 every day, and a first one right after the install). WAL is archived
+  continuously, so the database can be restored to any point within the retention.
 
 ## Backup to Oracle Object Storage
 

@@ -32,6 +32,8 @@ metadata:
     {{- include "secours-tech.labels" . | nindent 4 }}
 spec:
   schedule: {{ .Values.backup.schedule | quote }}
+  # a first base backup right away: without one, the archived WAL cannot be restored
+  immediate: true
   backupOwnerReference: self
   cluster:
     name: {{ include "secours-tech.database" . }}

@@ -77,11 +77,12 @@ kubectl -n "$NAMESPACE" logs job/secours-tech-migrate | grep -q "0 migration(s) 
 echo "second run applied nothing"
 
 step "backup to S3"
+backup="e2e-$(date +%s)"
 kubectl -n "$NAMESPACE" apply -f - <<YAML
 apiVersion: postgresql.cnpg.io/v1
 kind: Backup
 metadata:
-  name: e2e-$(date +%s)
+  name: $backup
 spec:
   cluster:
     name: secours-tech-db
@@ -89,14 +90,25 @@ spec:
   pluginConfiguration:
     name: barman-cloud.cloudnative-pg.io
 YAML
+phase=""
 for _ in $(seq 60); do
-  phases=$(kubectl -n "$NAMESPACE" get backups.postgresql.cnpg.io -o jsonpath='{.items[*].status.phase}')
-  case "$phases" in
-    *completed*) echo "backup completed"; break ;;
-    *failed*) kubectl -n "$NAMESPACE" get backups.postgresql.cnpg.io -o yaml; exit 1 ;;
+  phase=$(kubectl -n "$NAMESPACE" get backups.postgresql.cnpg.io "$backup" -o jsonpath='{.status.phase}')
+  case "$phase" in
+    completed) echo "backup $backup completed"; break ;;
+    failed) kubectl -n "$NAMESPACE" get backups.postgresql.cnpg.io "$backup" -o yaml; exit 1 ;;
   esac
   sleep 5
 done
-[[ "$phases" == *completed* ]] || { echo "backup did not complete: $phases"; exit 1; }
+[ "$phase" = completed ] || { echo "backup $backup did not complete: $phase"; exit 1; }
+# the scheduled backup is immediate: a base backup is taken right after the install
+scheduled=""
+for _ in $(seq 60); do
+  scheduled=$(kubectl -n "$NAMESPACE" get backups.postgresql.cnpg.io \
+    -l cnpg.io/scheduled-backup=secours-tech-db-daily -o jsonpath='{.items[*].status.phase}')
+  [[ "$scheduled" == *completed* ]] && break
+  sleep 5
+done
+[[ "$scheduled" == *completed* ]] || { echo "no completed scheduled backup: $scheduled"; exit 1; }
+echo "the daily schedule took its first backup at install"
 
 step "all checks passed"
