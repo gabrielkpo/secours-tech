@@ -92,7 +92,11 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   same URL becomes the next version and the previous one is marked `retired_at` (kept, so an
   earlier citation can still be traced). The loader refuses a PDF whose SHA-256 is not in the
   manifest (an old edition, a truncated download, a local note), and loads nothing; with
-  `--allow-local` such a file is loaded as a `local` document that retrieval never returns.
+  `--allow-local` such a file is loaded as a `local` document that retrieval never returns. A
+  file with new bytes but the same text (re-signed, re-exported) takes the place of the loaded
+  edition instead; a guide with pages drawn as images is fingerprinted by its file, since its
+  text layer does not cover them. After syncing with the manifest the loader fails if a guide
+  of the manifest has no current edition.
 - **Collection is watched, not forced.** The ministry's site (securite-civile.interieur.gouv.fr)
   answers 403 to automated clients. `collect check` identifies itself as a bot and does not pose
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked
