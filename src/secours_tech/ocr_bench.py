@@ -1,7 +1,7 @@
 """Reliability check of the OCR, guide by guide, against pages transcribed by hand.
 
-Rule (scoping, 15/10/2026): OCR text is used only if it is reliable. On a sample of each
-guide's OCR pages, every number must be read exactly (no number missing, none added) and at
+Rule (2026-10-15, docs/decisions.md D5): OCR text is used only if it is reliable. On a sample of
+each guide's OCR pages, every number must be read exactly (no number missing, none added) and at
 least 99 % of the characters must be right (character error rate <= 1 %). A guide that fails
 stays uncovered.
 

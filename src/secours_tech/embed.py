@@ -5,8 +5,8 @@ section", then the passage). Vectors are stored per model and per hash of that i
 (`chunks.input_sha256`, computed by Postgres), so rebuilding the chunks keeps every vector whose
 input did not change and only new inputs are sent to a model.
 
-`multilingual-e5-base` is the local reference (decision of 16/10/2026, scoping §6.4): it shows
-what the Mistral embedding brings. It needs the optional `local` dependencies
+`multilingual-e5-base` is the local reference (since 2026-10-16): it shows what the Mistral
+embedding brings. It needs the optional `local` dependencies
 (`uv sync --extra local`) and downloads the model from Hugging Face on first use.
 """
 

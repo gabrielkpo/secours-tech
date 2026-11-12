@@ -148,19 +148,21 @@ def earlier_final(folder: Path, setup: Setup, cases_sha256: str) -> Path | None:
     return None
 
 
-def table(paths: Sequence[Path], ks: Sequence[int] = (5, 20)) -> str:
-    """The README table of a set of records: one row per run, the scores of all its cases."""
-    header = ["Split", "Retriever", "Embedding", "Reranker", "n"]
+def table(paths: Sequence[Path], ks: Sequence[int] = (5, 20), full: bool = True) -> str:
+    """The Markdown table of a set of records: one row per run, the scores of all its cases. The
+    full table also names the split and the record each row comes from."""
+    header = ["Retriever", "Embedding", "Reranker", "n"]
     for k in ks:
         header += [f"hit@{k}", f"recall@{k}"]
-    header += ["MRR", "s / question", "Record"]
+    header += ["MRR", "s / question"]
+    if full:
+        header = ["Split", *header, "Record"]
     rows = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
     for path in paths:
         data = load(path)
         setup, scores = data["setup"], data["scores"]["all"]
         models = data["models"]
         cells = [
-            setup["split"],
             setup["retriever"],
             f"`{models['embedding']['model']}`" if "embedding" in models else "-",
             f"`{models['reranker']['model']}`" if "reranker" in models else "-",
@@ -168,6 +170,8 @@ def table(paths: Sequence[Path], ks: Sequence[int] = (5, 20)) -> str:
         ]
         for k in ks:
             cells += [f"{scores[f'hit@{k}']:.2f}", f"{scores[f'recall@{k}']:.2f}"]
-        cells += [f"{scores['mrr']:.2f}", f"{data['seconds_per_question']:.1f}", f"`{path.name}`"]
+        cells += [f"{scores['mrr']:.2f}", f"{data['seconds_per_question']:.1f}"]
+        if full:
+            cells = [setup["split"], *cells, f"`{path.name}`"]
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
