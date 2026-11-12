@@ -5,13 +5,18 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:  # a new push to a PR cancels its older run
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       # same Postgres major version and pgvector as the local Homebrew install
       postgres:
-        image: pgvector/pgvector:pg17
+        # pinned by digest (pg17 tag on 2026-11-12); update the digest by hand with Postgres
+        image: pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres  # throwaway CI container, not a real secret
@@ -22,10 +27,13 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/secours_tech_test
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # no token left in .git/config for later steps
       # poppler reads and renders the PDF pages, tesseract reads the pages drawn as images
       - run: sudo apt-get update -q && sudo apt-get install -y -q poppler-utils tesseract-ocr
-      # setup-uv publishes no moving major tag, so it is pinned to the v10.3.0 commit
+      # every action is pinned to a commit SHA, its version in the trailing comment; Dependabot
+      # moves both
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.11"
@@ -33,7 +41,7 @@ jobs:
       - name: Install
         run: uv sync --locked
       # pinned French model, cached between runs and checked against its SHA-256 (ocr.py)
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: data/tessdata
           key: tessdata-fra-${{ hashFiles('src/secours_tech/ocr.py') }}  # new pin, new cache
