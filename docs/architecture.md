@@ -24,8 +24,9 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **The bench is frozen by fingerprint, not published.** Cases are TOML files in
   `data/eval/cases/` (out of Git: they quote the doctrine). About 30 % of them, drawn in every
   category with a fixed seed, form the test split; `eval/frozen-test.sha256` holds the SHA-256 of
-  those files, and `bench` refuses to run once a test case differs from it. The test split is
-  scored only with `--final`. Retrieval is scored on the pages of the expected excerpts (2 to
+  those files, and `bench` refuses to run once a test case differs from it. Corrected test
+  cases can be frozen again (`bench refreeze`) only while no test record exists, and each change
+  is logged in `eval/frozen-test-history.md`. The test split is scored only with `--final`. Retrieval is scored on the pages of the expected excerpts (2 to
   13 per case), counted once in retrieval order: hit@k (an expected page among the first k),
   recall@k (share of the expected pages among the first k), all@k (every expected page among
   the first k) and MRR (first expected page); refusal cases are left to the answer scores of
