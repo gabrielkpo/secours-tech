@@ -25,13 +25,32 @@ class Chunk:
     section: int | None = None  # index in the document's sections, None when it has none
 
 
+def _split_long(sentence: str, size: int) -> list[str]:
+    """A sentence longer than `size`, cut at the last space that fits: a word or a number is
+    never split ("180 000 m3" must not become "1" and "80 000 m3"). Only a single token longer
+    than `size` is cut hard."""
+    parts: list[str] = []
+    while len(sentence) > size:
+        cut = sentence.rfind(" ", 1, size + 1)
+        if cut <= 0:
+            cut = size  # one token longer than a chunk: no space to cut at
+            parts.append(sentence[:cut])
+            sentence = sentence[cut:]
+        else:
+            parts.append(sentence[:cut])
+            sentence = sentence[cut + 1 :]
+    if sentence:
+        parts.append(sentence)
+    return parts
+
+
 def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
     """Pack whole sentences into chunks of at most `size` characters.
 
     Cutting on sentence boundaries keeps each chunk readable on its own, which matters
     both for retrieval and for quoting. The last `overlap` sentences of a chunk are
     repeated at the start of the next one so context is not lost at the boundary.
-    A single sentence longer than `size` is split hard, as a last resort.
+    A sentence longer than `size` is cut at a space, never inside a word or a number.
     """
     if size <= 0 or overlap < 0:
         raise ValueError("size must be > 0 and overlap >= 0")
@@ -41,7 +60,7 @@ def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
 
     pieces: list[str] = []
     for sentence in _SENTENCE_END.split(text):
-        pieces.extend(sentence[i : i + size] for i in range(0, len(sentence), size))
+        pieces.extend(_split_long(sentence, size))
 
     chunks: list[str] = []
     current: list[str] = []

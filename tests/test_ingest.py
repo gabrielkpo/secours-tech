@@ -25,9 +25,19 @@ def test_every_sentence_is_kept():
     assert all(f"Sentence number {i}." in joined for i in range(30))
 
 
-def test_overlong_sentence_is_split_hard_and_respects_size():
+def test_a_single_token_longer_than_a_chunk_is_split_hard_and_respects_size():
     chunks = chunk_text("a" * 25, size=10)
     assert chunks == ["a" * 10, "a" * 10, "a" * 5]
+
+
+def test_overlong_sentence_is_cut_at_a_space_never_inside_a_number():
+    # a table read as one long sentence, with a number sitting on the boundary
+    text = "Volume de " + "stockage " * 87 + "de 10 000 à 180 000 m3 selon les cellules"
+    chunks = chunk_text(text, size=800, overlap=0)
+    assert all(len(chunk) <= 800 for chunk in chunks)
+    assert " ".join(chunks) == " ".join(text.split())
+    tokens = set(text.split())
+    assert all(set(chunk.split()) <= tokens for chunk in chunks)
 
 
 def test_invalid_size_is_rejected():
