@@ -80,9 +80,14 @@ def test_register_files_known_pdfs_and_detects_a_new_version(tmp_path: Path):
     (downloads / "GTO-Engagement-Milieux-Vicies-V2.pdf").write_bytes(b"new edition")
     (downloads / "unknown.pdf").write_bytes(b"?")
     m = manifest(VICIE)
-    result = register(m, downloads, corpus)
+    refused = register(m, downloads, corpus)  # a changed fingerprint is not taken on its name
+    assert refused.filed == [] and [path.name for path, _, _ in refused.refused] == [
+        "GTO-Engagement-Milieux-Vicies-V2.pdf"
+    ]
+    assert refused.unknown == [downloads / "unknown.pdf"]
+    assert m.documents[0].sha256 == VICIE.sha256
+    result = register(m, downloads, corpus, frozenset({"GTO-Engagement-Milieux-Vicies-V2.pdf"}))
     assert result.filed == [corpus / "GTO" / "GTO-Engagement-Milieux-Vicies-V2.pdf"]
-    assert result.unknown == [downloads / "unknown.pdf"]
     assert m.documents[0].sha256 == hashlib.sha256(b"new edition").hexdigest()
 
 
@@ -141,3 +146,45 @@ def test_a_redirect_off_the_official_site_is_not_followed():
     request = urllib.request.Request(PAGE)
     assert handler.redirect_request(request, None, 302, "Found", {}, "https://example.org/") is None
     assert handler.redirect_request(request, None, 302, "Found", {}, f"{BASE}/x.pdf") is not None
+
+
+def test_text_read_from_the_page_is_shown_as_code_and_off_site_links_apart():
+    hostile = (
+        '<a href="/files/GDO-New.pdf">GDO [x](https://evil.example) @someone</a>'
+        '<a href="https://evil.example/GDO.pdf">Télécharger GDO pirate</a>'
+    )
+    report = check(manifest(), fetcher=lambda url: (200, hostile))
+    text = report.markdown()
+    assert "`GDO [x](https://evil.example) @someone`" in text
+    assert "Links to another site" in text and "`https://evil.example/GDO.pdf`" in text
+    assert "](https://evil.example" not in text.replace("`GDO [x](https://evil.example)", "")
+
+    breakout = '<a href="/x) @octocat [free money](https://evil.example/p.pdf">GDO</a>'
+    text = check(manifest(), fetcher=lambda url: (200, breakout)).markdown()
+    (line,) = [line for line in text.splitlines() if line.startswith("- [ ] GTO")]
+    assert line.endswith("%29%20%40octocat%20%5Bfree%20money%5D%28https://evil.example/p.pdf)")
+    assert "@octocat" not in text and "[free money]" not in text
+
+
+def test_register_explains_a_refused_new_version(tmp_path: Path, make_pdf, capsys):
+    from secours_tech.collect import main
+
+    pdf = make_pdf(["Nouvelle édition."], name="GTO-Engagement-Milieux-Vicies-V2.pdf")
+    path = tmp_path / "sources.toml"
+    manifest(VICIE).dump(path)
+    argv = ["--manifest", str(path), "register", str(pdf.parent), "--corpus", str(tmp_path / "c")]
+    with pytest.raises(SystemExit):
+        main(argv)
+    out = capsys.readouterr().out
+    assert "refused, the fingerprint changed" in out and "1 pages" in out
+    assert "--accept-new-version" in out
+    main([*argv, "--accept-new-version", pdf.name])
+    assert Manifest.load(path).documents[0].sha256 == hashlib.sha256(pdf.read_bytes()).hexdigest()
+
+
+def test_a_truncated_download_is_described_not_crashed_on(tmp_path: Path):
+    from secours_tech.collect import describe
+
+    broken = tmp_path / "x.pdf"
+    broken.write_bytes(b"%PDF-1.4 truncated")
+    assert describe(broken).startswith("unreadable PDF")

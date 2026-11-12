@@ -107,8 +107,10 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Collection is watched, not forced.** The ministry's site (securite-civile.interieur.gouv.fr)
   answers 403 to automated clients. `collect check` identifies itself as a bot and does not pose
   as a browser; once a month a workflow runs it and opens a `corpus` issue when a page is blocked
-  or differs from the manifest. A person downloads the PDFs in a browser and `collect register`
-  files them and updates the manifest.
+  or differs from the manifest (text read from the page is shown as code, and links to another
+  site are listed apart). A person downloads the PDFs in a browser and `collect register` files
+  them; a file whose fingerprint changed is refused, with both files' page counts, titles and
+  dates, until `--accept-new-version` names it, and only then is the manifest updated.
 - **OCR is stored, then gated.** `python -m secours_tech.ocr` copies each page routed to `ocr`
   without its pictures (`pikepdf`: every image that is not a few-pixel text mask is removed, so
   photos, drawings and grey boxes neither hide text nor read as gibberish) and reads it with
