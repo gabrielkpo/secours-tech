@@ -1,0 +1,35 @@
+name: Local extra
+# The `local` extra (torch, transformers) is too heavy for every CI run, so this workflow installs
+# it weekly and on pull requests that change the dependencies or the code using it: a torch or
+# transformers bump is exercised before it is merged. No model is downloaded.
+on:
+  pull_request:
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - src/secours_tech/embed.py
+      - src/secours_tech/rerank.py
+      - tests/test_local_extra.py
+      - .github/workflows/local-extra.yml
+  schedule:
+    - cron: "0 5 * * 2"  # weekly, Tuesday 05:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  local-extra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # no token left in .git/config for later steps
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          python-version: "3.11"
+      - name: Install with the local extra
+        run: uv sync --locked --extra local
+      - run: uv run pytest -rs tests/test_local_extra.py --no-cov
