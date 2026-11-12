@@ -124,3 +124,14 @@ def test_page_numbers_follow_the_given_page_numbers():
     pages = [f"Il faut {w}.\n{n - 2}" for w, n in zip(WORDS, numbers, strict=False)]
     cleaned = strip_repeated_lines(pages, numbers=numbers)
     assert cleaned == [f"Il faut {w}." for w in WORDS[:4]]
+
+
+def test_a_row_of_values_ending_a_page_is_kept_even_if_one_matches_the_page_number():
+    pages = [f"Isolateurs pour {w}.\n{i} à {i + 2}\n{i}" for i, w in enumerate(WORDS, start=1)]
+    cleaned = strip_repeated_lines(pages)
+    assert [page.splitlines()[-1] for page in cleaned] == [f"{i} à {i + 2}" for i in range(1, 7)]
+
+
+def test_footer_with_the_page_count_is_removed():
+    pages = [f"Il faut {w}.\n- {i} / 6 -" for i, w in enumerate(WORDS, start=1)]
+    assert strip_repeated_lines(pages) == [f"Il faut {w}." for w in WORDS]

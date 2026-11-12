@@ -61,6 +61,7 @@ def chunk_text(text: str, size: int = 800, overlap: int = 1) -> list[str]:
 EDGE = 3  # non-empty lines at the top and at the bottom of a page that may be a header or footer
 _WORD = re.compile(r"[^\W\d_]{3,}")
 _NUMBER = re.compile(r"\d+")
+_PAGE_OF = re.compile(r"\d\s*/\s*\d")
 
 
 def _zones(lines: list[str]) -> dict[int, set[str]]:
@@ -104,7 +105,14 @@ def strip_repeated_lines(
 
     def key(line: str) -> str:
         words = _WORD.findall(line)
-        return " ".join(words) if words else _NUMBER.sub("#", line.strip())
+        return " ".join(words) if words else line.strip()
+
+    def page_number(line: str) -> int | None:
+        # "12", "- 12 -" or "12/40"; a row of values such as "12 à 14" is not a page number
+        found = _NUMBER.findall(line)
+        if len(found) == 1 or (len(found) == 2 and _PAGE_OF.search(line)):
+            return int(found[0])
+        return None
 
     split = [page.splitlines() for page in pages]
     zoned = [_zones(lines) for lines in split]
@@ -121,8 +129,8 @@ def strip_repeated_lines(
             if _WORD.search(line) or not _NUMBER.search(line):
                 if key(line) in single:
                     keys.update((zone, key(line)) for zone in names)
-            else:
-                shifts.update(int(n) - number for n in _NUMBER.findall(line))
+            elif (printed := page_number(line)) is not None:
+                shifts.add(printed - number)
         for k in keys:
             counts[k] = counts.get(k, 0) + 1
         for s in shifts:
@@ -139,7 +147,8 @@ def strip_repeated_lines(
             return k in single and any(counts.get((z, k), 0) >= threshold for z in names)
         # a bare number goes only as a page number (its other occurrences on the page do not
         # matter: tables are full of bare numbers)
-        return any(int(n) - number in sequence for n in _NUMBER.findall(line))
+        printed = page_number(line)
+        return printed is not None and printed - number in sequence
 
     return [
         "\n".join(
