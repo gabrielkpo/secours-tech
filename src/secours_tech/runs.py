@@ -64,7 +64,7 @@ def _code() -> dict:
     try:
         commit = run_tool("git", "rev-parse", "HEAD", timeout=30).strip()
         changes = run_tool("git", "status", "--porcelain", "--untracked-files=no", timeout=30)
-    except (RuntimeError, subprocess.SubprocessError):
+    except (OSError, RuntimeError, subprocess.SubprocessError):
         return {"commit": None, "dirty": None}
     return {"commit": commit, "dirty": bool(changes.strip())}
 

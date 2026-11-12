@@ -175,7 +175,11 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
                 "-c",
                 "tessedit_create_txt=0",
             ],
-            env={**os.environ, "TESSDATA_PREFIX": str(model_dir.resolve())},
+            # tesseract gets its model folder, and none of the secrets in the environment
+            env={
+                **{k: v for k, v in os.environ.items() if k != "MISTRAL_API_KEY"},
+                "TESSDATA_PREFIX": str(model_dir.resolve()),
+            },
         )
     return text_from_tsv(tsv)
 
