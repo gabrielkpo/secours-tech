@@ -127,7 +127,7 @@ def test_page_numbers_follow_the_given_page_numbers():
 
 
 def test_a_row_of_values_ending_a_page_is_kept_even_if_one_matches_the_page_number():
-    pages = [f"Isolateurs pour {w}.\n{i} à {i + 2}\n{i}" for i, w in enumerate(WORDS, start=1)]
+    pages = [f"Tuyaux pour {w}.\n{i} à {i + 2}\n{i}" for i, w in enumerate(WORDS, start=1)]
     cleaned = strip_repeated_lines(pages)
     assert [page.splitlines()[-1] for page in cleaned] == [f"{i} à {i + 2}" for i in range(1, 7)]
 
