@@ -4,7 +4,7 @@
 
 [[guide]]
 file = "GDO Sauvegarde du patrimoine V4 juillet 2026 signé.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [29, 32, 41, 49]
 character_error_rate = 0.0002
 numbers_exact = true
@@ -13,7 +13,7 @@ chunks_indexed = 156
 
 [[guide]]
 file = "GDO-Engagement-Appareils-Telepilotes-Lutte-Appui-Secours.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [37, 45, 74, 77]
 character_error_rate = 0.0038
 numbers_exact = true
@@ -22,7 +22,7 @@ chunks_indexed = 252
 
 [[guide]]
 file = "GDO-Engagement-des-equipes-cynotechniques.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [4, 8, 11, 19]
 character_error_rate = 0.0279
 numbers_exact = true
@@ -31,7 +31,7 @@ chunks_indexed = 0
 
 [[guide]]
 file = "GDO-Interventions-Incendies-Structures.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [113, 139, 148, 162]
 character_error_rate = 0.0046
 numbers_exact = false
@@ -40,7 +40,7 @@ chunks_indexed = 0
 
 [[guide]]
 file = "GDO-Interventions-Milieu-Perilleux-Montagne-V2.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [9, 18, 21, 29]
 character_error_rate = 0.0014
 numbers_exact = true
@@ -49,7 +49,7 @@ chunks_indexed = 131
 
 [[guide]]
 file = "GDO-Interventions-Presence-De-Gaz.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [22, 36, 112, 136]
 character_error_rate = 0.0026
 numbers_exact = true
@@ -58,7 +58,7 @@ chunks_indexed = 451
 
 [[guide]]
 file = "GDO-Interventions-en-presence-ULM.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [24, 25, 29, 32]
 character_error_rate = 0.0220
 numbers_exact = false
@@ -67,7 +67,7 @@ chunks_indexed = 0
 
 [[guide]]
 file = "GDO-SSUAP-V1.1.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [4, 37, 64, 75]
 character_error_rate = 0.0002
 numbers_exact = true
@@ -76,7 +76,7 @@ chunks_indexed = 251
 
 [[guide]]
 file = "GDO-Soutien-de-l-intervenant-2026.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [9, 27, 35, 38]
 character_error_rate = 0.0002
 numbers_exact = true
@@ -85,7 +85,7 @@ chunks_indexed = 215
 
 [[guide]]
 file = "GTO-Engagement-Milieux-Vicies-V2.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [10, 34, 40, 59]
 character_error_rate = 0.0005
 numbers_exact = true
@@ -94,7 +94,7 @@ chunks_indexed = 167
 
 [[guide]]
 file = "GTO-Sauvegarde-Operationnelle.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [9, 24, 32, 43]
 character_error_rate = 0.0005
 numbers_exact = true
@@ -103,7 +103,7 @@ chunks_indexed = 110
 
 [[guide]]
 file = "GTO-Sauvetages-Mise-En-Securite-V2.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [25, 50, 63, 69]
 character_error_rate = 0.0012
 numbers_exact = true
@@ -112,7 +112,7 @@ chunks_indexed = 164
 
 [[guide]]
 file = "GTO-Secours-Milieu-Perilleux-Montagne.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [37, 40, 45, 79]
 character_error_rate = 0.0000
 numbers_exact = true
@@ -121,7 +121,7 @@ chunks_indexed = 183
 
 [[guide]]
 file = "GTO-Secours-milieux-Effondres-Instables.pdf"
-engine = "mistral-ocr-4-1 text-only"
+engine = "mistral-ocr-4-1 text-only, raised digits marked"
 pages_checked = [25, 47, 54, 135]
 character_error_rate = 0.0068
 numbers_exact = true
