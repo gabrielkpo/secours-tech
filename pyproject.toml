@@ -2,11 +2,18 @@
 name = "secours-tech"
 version = "0.1.0"
 description = "RAG assistant over official French firefighter doctrine (GDO, GTO, SSUAP, PSE), with cited sources."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Gabriel Kpodoh" }]
 requires-python = ">=3.11"
 dependencies = [
     "pikepdf==10.18.0",
     "psycopg[binary]>=3.2",
 ]
+
+[project.urls]
+Repository = "https://github.com/gabrielkpo/secours-tech"
+Issues = "https://github.com/gabrielkpo/secours-tech/issues"
 
 [project.optional-dependencies]
 # local reference embedding and reranking; not installed in the main CI job, exercised by the
@@ -44,8 +51,9 @@ allowed-confusables = ["’", "‘", "–", "›", "ı"]
 "tests/*" = ["S101"]
 
 [tool.uv]
-# The packages the `local` extra brought in were held to releases at least two weeks old when it
-# was added (11/11/2026); remove a line to let Dependabot move that package again.
+# Young releases are held back until they are two weeks old (the cooldown Dependabot applies);
+# review by 2026-12-15 and remove a line to let Dependabot move that package again. A security
+# fix for one of them removes its line in the same PR.
 exclude-newer-package = { annotated-doc = "2026-10-28T00:00:00Z", ast-serialize = "2026-10-29T00:00:00Z", coverage = "2026-10-29T00:00:00Z", mypy-extensions = "2026-10-29T00:00:00Z", anyio = "2026-10-28T00:00:00Z", click = "2026-10-28T00:00:00Z", cuda-bindings = "2026-10-28T00:00:00Z", cuda-pathfinder = "2026-10-28T00:00:00Z", filelock = "2026-10-28T00:00:00Z", hf-xet = "2026-10-28T00:00:00Z", huggingface-hub = "2026-10-28T00:00:00Z", markdown-it-py = "2026-10-28T00:00:00Z", nvidia-nvjitlink = "2026-10-28T00:00:00Z", pydantic = "2026-10-28T00:00:00Z", pydantic-core = "2026-10-28T00:00:00Z", regex = "2026-10-28T00:00:00Z", typer = "2026-10-28T00:00:00Z", typing-inspection = "2026-10-28T00:00:00Z" }
 
 [tool.mypy]

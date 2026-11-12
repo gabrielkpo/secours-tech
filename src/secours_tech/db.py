@@ -1,10 +1,11 @@
 """Connect to Postgres and apply the SQL migrations shipped with the package."""
 
 import logging
-import os
 from pathlib import Path
 
 import psycopg
+
+from secours_tech.env import setting
 
 log = logging.getLogger(__name__)
 
@@ -12,9 +13,11 @@ MIGRATIONS = Path(__file__).parent / "migrations"
 
 
 def connect(url: str | None = None) -> psycopg.Connection:
-    url = url or os.environ.get("DATABASE_URL")
+    url = url or setting("DATABASE_URL")
     if not url:
-        raise SystemExit("DATABASE_URL is not set (e.g. postgresql:///secours_tech)")
+        raise SystemExit(
+            "DATABASE_URL is not set, in the environment or .env (e.g. postgresql:///secours_tech)"
+        )
     # autocommit: nothing is pending by accident; writes that belong together are wrapped
     # in an explicit `with conn.transaction():` block
     return psycopg.connect(url, autocommit=True)

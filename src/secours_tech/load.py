@@ -62,7 +62,7 @@ def family_of(filename: str) -> str:
 
 
 def title_of(filename: str) -> str:
-    """Readable title from the file name, until the scraper reads the real one on the web page."""
+    """Readable title from the file name, for a local file the manifest does not describe."""
     return " ".join(re.split(r"[-_\s]+", Path(filename).stem)).strip()
 
 
