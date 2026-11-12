@@ -2,7 +2,7 @@
 # image as production. Passwords come from .env (see .env.example); Postgres listens on the
 # loopback only.
 #
-#   docker compose up -d db migrate                     # database and schema
+#   docker compose up -d --build db migrate             # image, database and schema
 #   docker compose run --rm pipeline secours_tech.load data/raw
 #
 # data/ (the PDFs downloaded by hand, the OCR model, the cases) is mounted, never baked in.

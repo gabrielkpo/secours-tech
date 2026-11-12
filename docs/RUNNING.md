@@ -42,10 +42,14 @@ runs as an unprivileged user; `compose.yaml` adds a local Postgres with pgvector
 the loopback only. Set `POSTGRES_PASSWORD` and `APP_DB_PASSWORD` in `.env`, then:
 
 ```bash
-docker compose up -d db migrate                          # database, role and schema
+docker compose up -d --build db migrate                  # image, database, role and schema
 docker compose run --rm pipeline secours_tech.load data/raw
-docker compose run --rm pipeline secours_tech.bench run --retriever vector --model e5
 ```
+
+`--build` rebuilds the image after a code change (without it, the last image built keeps
+running). The bench runs from the checkout, not the container: a run's record names its commit,
+which the image does not carry. Point it at the compose database:
+`DATABASE_URL=postgresql://secours_tech:<APP_DB_PASSWORD>@localhost:5433/secours_tech uv run python -m secours_tech.bench run ...`.
 
 The pipeline connects as `secours_tech`, owner of its database but not a superuser; the
 extensions are created once by `deploy/compose/initdb.sql`. `data/`, `eval/` and `corpus/` are

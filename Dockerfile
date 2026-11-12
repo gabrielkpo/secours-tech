@@ -22,8 +22,8 @@ RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.11-slim-trixie@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535
 # poppler reads and renders the PDF pages; tesseract checks suspect text layers (its French
-# model is fetched into data/tessdata and checked by SHA-256 on first use)
-# Debian packages over HTTPS (apt also checks their signatures)
+# model is fetched into data/tessdata and checked by SHA-256 on first use). Debian packages are
+# fetched over HTTPS, and apt also checks their signatures.
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr \
