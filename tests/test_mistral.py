@@ -39,7 +39,7 @@ def test_post_retries_on_rate_limit_and_never_echoes_the_key(monkeypatch):
             )
         return _Answer(json.dumps({"ok": True}).encode())
 
-    monkeypatch.setattr(mistral.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(mistral._OPENER, "open", fake_urlopen)
     monkeypatch.setattr(mistral.time, "sleep", lambda s: None)
     assert post("ocr", {"model": "m"}, "secret-key") == {"ok": True}
     assert len(calls) == 2
@@ -48,7 +48,7 @@ def test_post_retries_on_rate_limit_and_never_echoes_the_key(monkeypatch):
     def refused(request, timeout):
         raise urllib.error.HTTPError(request.full_url, 401, "no", {}, io.BytesIO(b"unauthorized"))
 
-    monkeypatch.setattr(mistral.urllib.request, "urlopen", refused)
+    monkeypatch.setattr(mistral._OPENER, "open", refused)
     with pytest.raises(MistralError) as error:
         post("ocr", {}, "secret-key")
     assert "401" in str(error.value) and "secret-key" not in str(error.value)
@@ -61,8 +61,41 @@ def test_post_retries_network_errors_then_reports_them(monkeypatch):
         attempts.append(1)
         raise urllib.error.URLError("timed out")
 
-    monkeypatch.setattr(mistral.urllib.request, "urlopen", offline)
+    monkeypatch.setattr(mistral._OPENER, "open", offline)
     monkeypatch.setattr(mistral.time, "sleep", lambda s: None)
     with pytest.raises(MistralError, match="network error"):
         post("ocr", {}, "k")
     assert len(attempts) == mistral.RETRIES
+
+
+def test_a_redirect_is_never_followed_with_the_key(monkeypatch):
+    handler = mistral._NoRedirect()
+    request = mistral.urllib.request.Request("https://api.mistral.ai/v1/ocr")
+    assert handler.redirect_request(request, None, 302, "Found", {}, "https://elsewhere/") is None
+
+    def redirected(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 302, "Found", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(mistral._OPENER, "open", redirected)
+    with pytest.raises(MistralError, match="redirect refused"):
+        post("ocr", {}, "secret-key")
+
+
+def test_retry_after_is_honoured_and_a_truncated_answer_is_retried(monkeypatch):
+    waits, calls = [], []
+
+    def flaky(request, timeout):
+        calls.append(1)
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(
+                request.full_url, 429, "busy", {"Retry-After": "7"}, io.BytesIO(b"")
+            )
+        if len(calls) == 2:
+            return _Answer(b'{"truncated')
+        return _Answer(b'{"ok": true}')
+
+    monkeypatch.setattr(mistral._OPENER, "open", flaky)
+    monkeypatch.setattr(mistral.time, "sleep", waits.append)
+    assert post("ocr", {}, "k") == {"ok": True}
+    assert 7 <= waits[0] < 8 and len(waits) == 2
+    assert mistral._wait(0, "\u00b2") < 3  # a non-ASCII digit is not a number of seconds

@@ -1,7 +1,10 @@
 import hashlib
+import urllib.request
 from pathlib import Path
 
-from secours_tech.collect import Entry, Listing, Manifest, check, parse_listing, register
+import pytest
+
+from secours_tech.collect import Entry, Listing, Manifest, check, fetch, parse_listing, register
 
 PAGE = "https://www.securite-civile.interieur.gouv.fr/documentation/gto.html"
 BASE = "https://www.securite-civile.interieur.gouv.fr/sites/securitecivile/files/medias/documents"
@@ -103,3 +106,38 @@ def test_unreachable_page_is_reported_for_a_manual_check():
     report = check(manifest(VICIE), fetcher=lambda url: (0, None))
     assert report.blocked == [(PAGE, 0)]
     assert "unreachable" in report.markdown()
+
+
+@pytest.mark.parametrize(
+    ("url", "family", "sha", "error"),
+    [
+        ("http://www.securite-civile.interieur.gouv.fr/x.pdf", "GDO", "a" * 64, "is not on"),
+        ("file:///etc/passwd", "GDO", "a" * 64, "is not on"),
+        (f"{BASE}/x.pdf", "OTHER", "a" * 64, "unknown family"),
+        (f"{BASE}/x.pdf", "GDO", "not-a-hash", "malformed sha256"),
+    ],
+)
+def test_a_manifest_entry_off_the_official_site_or_malformed_is_refused(
+    tmp_path: Path, url, family, sha, error
+):
+    path = tmp_path / "sources.toml"
+    path.write_text(
+        f'[[document]]\nfamily = "{family}"\ntitle = "T"\nurl = "{url}"\nsha256 = "{sha}"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=error):
+        Manifest.load(path)
+
+
+def test_fetch_refuses_a_page_off_the_official_site():
+    with pytest.raises(ValueError, match="not an official page"):
+        fetch("https://example.org/listing.html")
+
+
+def test_a_redirect_off_the_official_site_is_not_followed():
+    from secours_tech.collect import _OfficialOnly
+
+    handler = _OfficialOnly()
+    request = urllib.request.Request(PAGE)
+    assert handler.redirect_request(request, None, 302, "Found", {}, "https://example.org/") is None
+    assert handler.redirect_request(request, None, 302, "Found", {}, f"{BASE}/x.pdf") is not None
