@@ -115,10 +115,10 @@ def missing_inputs(conn, model: str) -> list[tuple[str, str]]:
     ).fetchall()
 
 
-def embed_corpus(conn, embedder: Embedder, batch: int = BATCH) -> int:
-    """Embed every chunk input still missing for this model; each batch is stored as it comes,
-    so an interrupted run resumes where it stopped."""
-    todo = missing_inputs(conn, embedder.name)
+def embed_corpus(conn, embedder: Embedder, batch: int = BATCH, limit: int | None = None) -> int:
+    """Embed every chunk input still missing for this model (at most `limit`); each batch is
+    stored as it comes, so an interrupted run resumes where it stopped."""
+    todo = missing_inputs(conn, embedder.name)[:limit]
     for start in range(0, len(todo), batch):
         part = todo[start : start + batch]
         vectors = embedder.passages([text for _, text in part])
@@ -139,16 +139,26 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Embed the chunks still missing a vector.")
     parser.add_argument("--model", choices=sorted(EMBEDDERS), required=True)
     parser.add_argument("--batch", type=int, default=BATCH)
+    parser.add_argument(
+        "--dry-run", action="store_true", help="count the inputs a run would send, send none"
+    )
+    parser.add_argument("--limit", type=int, help="embed at most this many inputs")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     from secours_tech.db import connect, migrate
 
-    embedder = EMBEDDERS[args.model]()
+    model = EMBEDDERS[args.model]
     with connect() as conn:
         migrate(conn)
-        done = embed_corpus(conn, embedder, args.batch)
-    print(f"{embedder.name}: {done} inputs embedded")
+        if args.dry_run:
+            todo = missing_inputs(conn, model.name)[: args.limit]
+            characters = sum(len(text) for _, text in todo)
+            # about 4 characters per token in French: enough to see what a paid run would cost
+            print(f"{model.name}: {len(todo)} inputs, about {characters // 4} tokens, none sent")
+            return
+        done = embed_corpus(conn, model(), args.batch, args.limit)
+    print(f"{model.name}: {done} inputs embedded")
 
 
 if __name__ == "__main__":

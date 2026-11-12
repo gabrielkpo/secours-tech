@@ -186,3 +186,59 @@ def test_raised_digits_after_a_number_keep_a_caret():
     assert markdown_to_text("un débit de $10^{3}$ l/min") == "un débit de 10^3 l/min"
     assert markdown_to_text("seuil de $10^{-6}$ et 10⁻³ Sv") == "seuil de 10^-6 et 10^-3 Sv"
     assert markdown_to_text("0,5 m³ et $\\mathrm{m}^{2}$") == "0,5 m3 et m2"  # units stay inline
+
+
+def _ocr_guide(conn):
+    from secours_tech.extract import Page
+    from secours_tech.load import SourceDocument, store_document
+
+    pages = (Page(1, "", "ocr", 120, 25, 26, 1.0), Page(2, "", "ocr", 5, 0, 1, 1.0))
+    store_document(conn, SourceDocument("GTO-test.pdf", "a" * 64, ["", ""], pages))
+    (doc,) = conn.execute("SELECT id FROM documents").fetchone()
+    conn.execute(
+        "INSERT INTO chunks (document_id, page, position, text, extraction)"
+        " VALUES (%s, 1, 0, 'ancien texte', 'ocr')",
+        (doc,),
+    )
+    return doc
+
+
+def test_an_ocr_run_withdraws_chunks_only_for_guides_it_reads_again(conn):
+    from secours_tech import ocr
+
+    doc = _ocr_guide(conn)
+    jobs = [ocr.Job(doc, 1, Path("GTO-test.pdf"), True)]
+    failed = ocr.read_pages(conn, jobs, lambda pdf, page: None, "engine-2", 1)
+    assert failed == {"read": 0, "failed": 1, "empty": 0, "withdrawn": 0}
+    assert conn.execute("SELECT count(*) FROM chunks").fetchone() == (1,)  # nothing read
+
+    def boom(pdf, page):
+        raise ocr.MistralError("quota")
+
+    assert ocr.read_pages(conn, jobs, boom, "engine-2", 1)["failed"] == 1
+    counts = ocr.read_pages(conn, jobs, lambda pdf, page: ocr.OcrResult("Ventiler.", None), "e2", 1)
+    assert counts == {"read": 1, "failed": 0, "empty": 0, "withdrawn": 1}
+    assert conn.execute("SELECT ocr_text, ocr_engine FROM pages WHERE page = 1").fetchone() == (
+        "Ventiler.",
+        "e2",
+    )
+
+
+def test_an_empty_reading_of_a_page_with_text_is_kept_for_the_next_run(conn):
+    from secours_tech import ocr
+
+    doc = _ocr_guide(conn)
+    jobs = [ocr.Job(doc, 1, Path("x.pdf"), True), ocr.Job(doc, 2, Path("x.pdf"), False)]
+    counts = ocr.read_pages(conn, jobs, lambda pdf, page: ocr.OcrResult("", None), "e2", 1)
+    assert counts == {"read": 1, "failed": 0, "empty": 1, "withdrawn": 1}  # the photo page is read
+    engines = conn.execute("SELECT page, ocr_engine FROM pages ORDER BY page").fetchall()
+    assert engines == [(1, None), (2, "e2")]
+
+
+def test_mistral_ocr_answer_must_hold_exactly_one_page(tmp_path, monkeypatch, make_pdf):
+    from secours_tech import ocr
+
+    pdf = make_pdf(["Couper le gaz."])
+    monkeypatch.setattr(ocr, "post", lambda path, payload, key: {"pages": []})
+    with pytest.raises(ocr.MistralError, match="0 page"):
+        ocr.mistral_ocr_page(pdf, 1, "k")
