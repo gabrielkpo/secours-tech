@@ -25,9 +25,29 @@ def test_every_sentence_is_kept():
     assert all(f"Sentence number {i}." in joined for i in range(30))
 
 
-def test_overlong_sentence_is_split_hard_and_respects_size():
+def test_a_single_token_longer_than_a_chunk_is_split_hard_and_respects_size():
     chunks = chunk_text("a" * 25, size=10)
     assert chunks == ["a" * 10, "a" * 10, "a" * 5]
+
+
+def test_overlong_sentence_is_cut_at_a_space_never_inside_a_number():
+    # a table read as one long sentence, with a number sitting on the boundary
+    text = "Réserve de " + "citerne " * 97 + "de 12 000 à 120 000 l selon le modèle"
+    chunks = chunk_text(text, size=800, overlap=0)
+    assert all(len(chunk) <= 800 for chunk in chunks)
+    assert " ".join(chunks) == " ".join(text.split())
+    tokens = set(text.split())
+    assert all(set(chunk.split()) <= tokens for chunk in chunks)
+
+
+def test_a_number_grouped_by_a_space_is_not_cut():
+    # the limit falls between "120" and "000": the cut moves before the whole number
+    text = "x" * 782 + " de 12 000 à 120 000 l selon le modèle"
+    last_space = text.rfind(" ", 0, 801)
+    assert text[last_space - 3 : last_space + 4] == "120 000"  # the naive cut splits the number
+    chunks = chunk_text(text, size=800, overlap=0)
+    assert any("120 000 l" in chunk for chunk in chunks)
+    assert not any(chunk.startswith("000") for chunk in chunks)
 
 
 def test_invalid_size_is_rejected():
