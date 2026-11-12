@@ -143,10 +143,12 @@ def load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def earlier_final(folder: Path, setup: Setup) -> Path | None:
-    """A record of the test split with the same setup: the test split is scored once."""
+def earlier_final(folder: Path, setup: Setup, cases_sha256: str) -> Path | None:
+    """A record of the same test cases with the same setup: the test split is scored once (a
+    new freeze of the test split is a new set, scored once in turn)."""
     for path in sorted(folder.glob("*.json")) if folder.exists() else []:
-        if load(path)["setup"] == asdict(setup):
+        data = load(path)
+        if data["setup"] == asdict(setup) and data["cases"]["sha256"] == cases_sha256:
             return path
     return None
 

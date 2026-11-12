@@ -56,3 +56,14 @@ def test_the_test_split_is_scored_once_per_setup(bench):
         main([*argv, "--split", "test", "--final"])
     main([*argv, "--split", "test", "--final", "--force"])
     assert len(list(runs.glob("*-test-*.json"))) == 2
+
+
+def test_a_new_test_set_is_scored_once_in_turn(bench, tmp_path):
+    runs, argv = bench
+    main([*argv, "--split", "test", "--final"])
+    (tmp_path / "cases" / "Q02.toml").write_text(
+        CASE.format(id="Q02", split="test").replace("Couper le gaz ?", "Le gaz ?"),
+        encoding="utf-8",
+    )  # a new freeze of the test split: other cases
+    main([*argv, "--split", "test", "--final"])
+    assert len(list(runs.glob("*-test-*.json"))) == 2

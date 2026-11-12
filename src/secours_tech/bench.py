@@ -459,7 +459,12 @@ def main(argv: list[str] | None = None) -> None:
         setup = Setup(args.split, args.retriever, None, args.rerank)
         if args.retriever != "fulltext":
             setup = Setup(args.split, args.retriever, args.model, args.rerank)
-        if args.split == "test" and not args.force and (done := earlier_final(args.runs, setup)):
+        cases_sha256 = fingerprint(cases, args.split)
+        if (
+            args.split == "test"
+            and not args.force
+            and (done := earlier_final(args.runs, setup, cases_sha256))
+        ):
             raise SystemExit(f"the test split was already scored with this setup ({done})")
         chosen = [case for case in cases if case.split == args.split]
         embedder = None
@@ -491,11 +496,11 @@ def main(argv: list[str] | None = None) -> None:
         seconds = (time.perf_counter() - started) / max(len(ranks), 1)
         scores = score(chosen, ranks, args.k)
         print(f"{seconds:.2f} s per question")
-        path = write(
-            args.runs,
-            record(conn, setup, fingerprint(cases, args.split), ranks, scores, seconds),
-        )
+        data = record(conn, setup, cases_sha256, ranks, scores, seconds)
+        path = write(args.runs, data)
         print(f"record written to {path}")
+        if data["code"]["dirty"]:
+            print("warning: uncommitted changes; this record does not describe its commit")
         for group in ["all", *CATEGORIES]:
             if group in scores:
                 row = scores[group]
