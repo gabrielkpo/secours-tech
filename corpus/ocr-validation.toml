@@ -9,7 +9,7 @@ pages_checked = [29, 32, 41, 49]
 character_error_rate = 0.0002
 numbers_exact = true
 passed = true
-chunks_indexed = 156
+chunks_indexed = 154
 
 [[guide]]
 file = "GDO-Engagement-Appareils-Telepilotes-Lutte-Appui-Secours.pdf"
@@ -18,7 +18,7 @@ pages_checked = [37, 45, 74, 77]
 character_error_rate = 0.0038
 numbers_exact = true
 passed = true
-chunks_indexed = 252
+chunks_indexed = 249
 
 [[guide]]
 file = "GDO-Engagement-des-equipes-cynotechniques.pdf"
@@ -45,7 +45,7 @@ pages_checked = [9, 18, 21, 29]
 character_error_rate = 0.0014
 numbers_exact = true
 passed = true
-chunks_indexed = 131
+chunks_indexed = 128
 
 [[guide]]
 file = "GDO-Interventions-Presence-De-Gaz.pdf"
@@ -54,7 +54,7 @@ pages_checked = [22, 36, 112, 136]
 character_error_rate = 0.0026
 numbers_exact = true
 passed = true
-chunks_indexed = 451
+chunks_indexed = 448
 
 [[guide]]
 file = "GDO-Interventions-en-presence-ULM.pdf"
@@ -72,7 +72,7 @@ pages_checked = [4, 37, 64, 75]
 character_error_rate = 0.0002
 numbers_exact = true
 passed = true
-chunks_indexed = 251
+chunks_indexed = 249
 
 [[guide]]
 file = "GDO-Soutien-de-l-intervenant-2026.pdf"
@@ -81,7 +81,7 @@ pages_checked = [9, 27, 35, 38]
 character_error_rate = 0.0002
 numbers_exact = true
 passed = true
-chunks_indexed = 215
+chunks_indexed = 211
 
 [[guide]]
 file = "GTO-Engagement-Milieux-Vicies-V2.pdf"
@@ -90,7 +90,7 @@ pages_checked = [10, 34, 40, 59]
 character_error_rate = 0.0005
 numbers_exact = true
 passed = true
-chunks_indexed = 167
+chunks_indexed = 163
 
 [[guide]]
 file = "GTO-Sauvegarde-Operationnelle.pdf"
@@ -99,7 +99,7 @@ pages_checked = [9, 24, 32, 43]
 character_error_rate = 0.0005
 numbers_exact = true
 passed = true
-chunks_indexed = 110
+chunks_indexed = 105
 
 [[guide]]
 file = "GTO-Sauvetages-Mise-En-Securite-V2.pdf"
@@ -108,7 +108,7 @@ pages_checked = [25, 50, 63, 69]
 character_error_rate = 0.0012
 numbers_exact = true
 passed = true
-chunks_indexed = 164
+chunks_indexed = 159
 
 [[guide]]
 file = "GTO-Secours-Milieu-Perilleux-Montagne.pdf"
@@ -117,7 +117,7 @@ pages_checked = [37, 40, 45, 79]
 character_error_rate = 0.0000
 numbers_exact = true
 passed = true
-chunks_indexed = 183
+chunks_indexed = 180
 
 [[guide]]
 file = "GTO-Secours-milieux-Effondres-Instables.pdf"
@@ -126,4 +126,4 @@ pages_checked = [25, 47, 54, 135]
 character_error_rate = 0.0068
 numbers_exact = true
 passed = true
-chunks_indexed = 283
+chunks_indexed = 276

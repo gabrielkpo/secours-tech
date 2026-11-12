@@ -48,8 +48,8 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   hash, computed by Postgres, and `embeddings` is keyed by (model, hash). Rebuilding the chunks
   keeps every vector whose input did not change, so no text is paid for twice. The vector column
   is untyped, since models differ in size (1024 for `mistral-embed-2312`, pinned; 768 for e5);
-  7,500 chunks are searched exactly, without an index. The hybrid search fuses the full-text and
-  vector rankings by reciprocal rank (k = 60, D10).
+  about 7,400 chunks are searched exactly, without an index. The hybrid search fuses the
+  full-text and vector rankings by reciprocal rank (k = 60, D10).
 - **Reranking is local and stores nothing.** The first 50 chunks of a retriever are reordered
   either by the `bge-reranker-v2-m3` cross-encoder (D11) or by BGE-M3's multi-vector head (D20:
   a vector per token, each question token keeps its best match, the score is their mean). Both
