@@ -199,9 +199,14 @@ class Report:
                 f"- [ ] {url} ({f'HTTP {status}' if status else 'unreachable'})"
                 for url, status in self.blocked
             ]
-        if self.new:
+        official = [(f, t, u) for f, t, u in self.new if u.startswith(OFFICIAL)]
+        elsewhere = [(f, t, u) for f, t, u in self.new if not u.startswith(OFFICIAL)]
+        if official:
             out.append("### Guides published but not indexed")
-            out += [f"- [ ] {family}: [{title}]({url})" for family, title, url in self.new]
+            out += [f"- [ ] {family}: [{_code(title)}]({url})" for family, title, url in official]
+        if elsewhere:
+            out.append("### Links to another site (not guides to download: check the page)")
+            out += [f"- {family}: {_code(title)} {_code(url)}" for family, title, url in elsewhere]
         if self.removed:
             out.append("### Indexed guides no longer published")
             out += [f"- [ ] {doc.family}: {doc.title} ({doc.url})" for doc in self.removed]
@@ -210,6 +215,12 @@ class Report:
             "`uv run python -m secours_tech.collect register <folder>` and open a PR."
         )
         return "\n".join(out) + "\n"
+
+
+def _code(text: str) -> str:
+    """Text read from a web page, shown as inline code: no Markdown, link or @mention in it is
+    rendered in the issue."""
+    return "`" + " ".join(text.replace("`", "'").split()) + "`"
 
 
 def check(manifest: Manifest, fetcher=fetch) -> Report:
@@ -236,15 +247,31 @@ def check(manifest: Manifest, fetcher=fetch) -> Report:
 class Registered:
     filed: list[Path] = field(default_factory=list)
     new_versions: list[Entry] = field(default_factory=list)
+    refused: list[tuple[Path, Entry, str]] = field(default_factory=list)  # file, entry, new SHA
     unknown: list[Path] = field(default_factory=list)
 
 
-def register(manifest: Manifest, downloads: Path, corpus: Path) -> Registered:
+def describe(pdf: Path) -> str:
+    """Page count, title and modification date of a PDF, to tell two editions apart."""
+    import pikepdf
+
+    with pikepdf.open(pdf) as document:
+        info = document.docinfo
+        title = str(info.get("/Title", "")) or "no title"
+        modified = str(info.get("/ModDate", "")) or "no date"
+        return f"{len(document.pages)} pages, title {title!r}, modified {modified}"
+
+
+def register(
+    manifest: Manifest, downloads: Path, corpus: Path, accept: frozenset[str] = frozenset()
+) -> Registered:
     """File PDFs downloaded by hand under corpus/<family>/, matched to the manifest by name.
 
-    A file whose fingerprint differs from the manifest is a new version: the manifest entry is
-    updated, and the loader retires the previous version. Files not in the manifest are listed
-    for a person to describe (family, title, URL); they are not filed.
+    A file whose fingerprint differs from the manifest is a new version only when its name is in
+    `accept`: the manifest entry is then updated, and the loader retires the previous version.
+    Otherwise it is refused, not filed (a truncated or wrong download must not replace a guide
+    on the strength of its name). Files not in the manifest are listed for a person to describe
+    (family, title, URL); they are not filed.
     """
     result = Registered()
     by_name = {doc.filename: doc for doc in manifest.documents}
@@ -254,6 +281,9 @@ def register(manifest: Manifest, downloads: Path, corpus: Path) -> Registered:
             result.unknown.append(pdf)
             continue
         sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
+        if sha != doc.sha256 and pdf.name not in accept:
+            result.refused.append((pdf, doc, sha))
+            continue
         if sha != doc.sha256:
             updated = replace(doc, sha256=sha)
             manifest.documents[manifest.documents.index(doc)] = updated
@@ -274,6 +304,13 @@ def main(argv: list[str] | None = None) -> None:
     register_cmd = sub.add_parser("register", help="file PDFs downloaded by hand")
     register_cmd.add_argument("downloads", type=Path)
     register_cmd.add_argument("--corpus", type=Path, default=Path("data/raw"))
+    register_cmd.add_argument(
+        "--accept-new-version",
+        action="append",
+        default=[],
+        metavar="FILENAME",
+        help="file name whose new fingerprint is accepted as a new edition (repeatable)",
+    )
     args = parser.parse_args(argv)
 
     manifest = Manifest.load(args.manifest)
@@ -288,7 +325,7 @@ def main(argv: list[str] | None = None) -> None:
                 fh.write(f"action={'true' if report.needs_action else 'false'}\n")
         return
 
-    result = register(manifest, args.downloads, args.corpus)
+    result = register(manifest, args.downloads, args.corpus, frozenset(args.accept_new_version))
     if result.new_versions:
         manifest.dump(args.manifest)
     for path in result.filed:
@@ -297,6 +334,14 @@ def main(argv: list[str] | None = None) -> None:
         print(f"new version of {doc.family} '{doc.title}': manifest updated, open a PR")
     for path in result.unknown:
         print(f"not in the manifest, add an entry first: {path.name}")
+    for path, doc, sha in result.refused:
+        old = args.corpus / doc.family / path.name
+        print(f"refused, the fingerprint changed: {path.name}")
+        print(f"  manifest {doc.sha256}" + (f"  {describe(old)}" if old.exists() else ""))
+        print(f"  download {sha}  {describe(path)}")
+        print(f"  a new edition? check it, then: register --accept-new-version '{path.name}'")
+    if result.refused:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
