@@ -203,24 +203,43 @@ def frozen_fingerprint(path: Path = FINGERPRINT) -> str | None:
 # --- retrieval scores -------------------------------------------------------------------------
 
 
-def first_hit(case: Case, ranking: Sequence[tuple[str, int]]) -> int | None:
-    """Rank (1-based) of the first expected page, pages counted once, in retrieval order."""
-    seen: list[tuple[str, int]] = []
+def page_ranks(case: Case, ranking: Sequence[tuple[str, int]]) -> list[int | None]:
+    """Rank (1-based) of each expected page of the case, pages counted once in retrieval order;
+    None for an expected page that was not retrieved. In the order of the sorted expected pages."""
+    order: dict[tuple[str, int], int] = {}
     for page in ranking:
-        if page in seen:
-            continue
-        seen.append(page)
-        if page in case.expected_pages:
-            return len(seen)
-    return None
+        order.setdefault(page, len(order) + 1)
+    return [order.get(page) for page in sorted(case.expected_pages)]
 
 
-def summarize(ranks: Sequence[int | None], ks: Sequence[int] = (5, 20)) -> dict[str, float]:
-    """recall@k: share of cases with an expected page in the first k pages; MRR: mean of
-    1 / rank of the first expected page (0 when none is found)."""
-    n = len(ranks)
-    scores = {f"recall@{k}": sum(r is not None and r <= k for r in ranks) / n for k in ks}
-    scores["mrr"] = sum(1 / r for r in ranks if r is not None) / n
+def summarize(
+    cases: Sequence[Sequence[int | None]], ks: Sequence[int] = (5, 20)
+) -> dict[str, float]:
+    """Mean over the cases, each given as the ranks of its expected pages:
+
+    - hit@k: an expected page is among the first k pages (one of a case's 2 to 13 pages is
+      enough, so it says nothing about the other pages an answer may need);
+    - recall@k: share of the case's expected pages among the first k pages;
+    - all@k: every expected page is among the first k pages;
+    - mrr: 1 / rank of the first expected page found (0 when none is).
+    """
+    n = len(cases)
+    found = [[r for r in ranks if r is not None] for ranks in cases]
+    scores: dict[str, float] = {}
+    for k in ks:
+        scores[f"hit@{k}"] = sum(any(r <= k for r in f) for f in found) / n
+        scores[f"recall@{k}"] = (
+            sum(sum(r <= k for r in f) / len(ranks) for f, ranks in zip(found, cases, strict=True))
+            / n
+        )
+        scores[f"all@{k}"] = (
+            sum(
+                len(f) == len(ranks) and all(r <= k for r in f)
+                for f, ranks in zip(found, cases, strict=True)
+            )
+            / n
+        )
+    scores["mrr"] = sum(1 / min(f) for f in found if f) / n
     return scores
 
 
@@ -229,13 +248,13 @@ def evaluate(
 ) -> dict[str, dict[str, float]]:
     """Scores over the answered cases, all together and per category. Refusal cases have no
     page to find: they are scored when answers are generated (J4), not here."""
-    ranks: dict[str, list[int | None]] = {}
+    ranks: dict[str, list[list[int | None]]] = {}
     for case in cases:
         if case.refusal:
             continue
-        rank = first_hit(case, retriever(case.question))
-        ranks.setdefault("all", []).append(rank)
-        ranks.setdefault(case.category, []).append(rank)
+        found = page_ranks(case, retriever(case.question))
+        ranks.setdefault("all", []).append(found)
+        ranks.setdefault(case.category, []).append(found)
     return {group: {"n": len(r), **summarize(r, ks)} for group, r in ranks.items()}
 
 
@@ -355,7 +374,7 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("check", help="every excerpt is found word for word on its page")
     sub.add_parser("split", help="draw the test split (refused once the test is frozen)")
     sub.add_parser("freeze", help="write the fingerprint of the test split")
-    run = sub.add_parser("run", help="retrieval scores (recall@k, MRR) on a split")
+    run = sub.add_parser("run", help="retrieval scores (hit@k, recall@k, all@k, MRR) on a split")
     run.add_argument("--retriever", choices=("fulltext", "vector", "hybrid"), default="fulltext")
     run.add_argument("--model", choices=("mistral", "e5"), default="mistral")
     run.add_argument(

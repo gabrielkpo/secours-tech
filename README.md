@@ -103,7 +103,7 @@ Question : Quel périmètre de sécurité par défaut autour d'une installation 
 |---|---|---|
 | J0 Scoping | Requirements, decisions, evaluation protocol | in review |
 | J1 Corpus and extraction | PDF text per page, OCR of image-only pages, Postgres schema and loader | loader, page routing, sections and OCR merged; 11 of 14 OCR guides indexed |
-| J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (recall@k, MRR) |
+| J2 Evaluation set v1 | 31 questions with expected answers and pages, drafted from the guides and checked by a firefighter before any run | done: 31 cases validated, 9 frozen for the final test; retrieval scores (hit@k, page recall@k, MRR) |
 | J3 Retrieval | Embeddings, full text, hybrid fusion, chunk-size trials | in progress: full text, two embeddings, hybrid RRF and two rerankers measured |
 | J4 Generation | Prompt, structured output, citation check, refusals | planned |
 | J5 Local app | Query log, FastAPI with rate limit, minimal UI | planned |
@@ -137,9 +137,11 @@ dev cases: right page in the first 5 pages for 62 % of the cases, in the first 2
 0.43. Embeddings and hybrid search (J3) are scored against this baseline.
 
 **Retrieval so far (J3, 11/11/2026, 16 answered dev cases).** A page counts once; the expected
-pages are those of the expected excerpts.
+pages are those of the expected excerpts. hit@k: an expected page among the first k pages (one
+page of a case is enough; the share of each case's pages found, recall@k, comes with the run
+records).
 
-| Retriever | recall@5 | recall@20 | MRR |
+| Retriever | hit@5 | hit@20 | MRR |
 |---|---|---|---|
 | Full text (Postgres `fr`, any word) | 0.62 | 0.81 | 0.43 |
 | `mistral-embed` vectors (context header + text) | 0.88 | **1.00** | 0.84 |
@@ -158,7 +160,7 @@ chunks a retriever found first: the `bge-reranker-v2-m3` cross-encoder (D11) and
 multi-vector mode (D20, one vector per token, best match per question token). Seconds per
 question on the Mac's CPU (M1, 8 GB), embedding and reranking included.
 
-| First stage | Reranker | recall@5 | recall@20 | MRR | s / question |
+| First stage | Reranker | hit@5 | hit@20 | MRR | s / question |
 |---|---|---|---|---|---|
 | `mistral-embed` vectors | `bge-reranker-v2-m3` | **0.94** | **1.00** | **0.94** | 28 |
 | `mistral-embed` vectors | BGE-M3 multi-vector | **0.94** | **1.00** | 0.90 | 17 |
@@ -209,7 +211,7 @@ milestones need (server side only).
 |---|---|
 | `src/secours_tech/extract.py`, `ingest.py` | Page text with poppler and its route (text, OCR, blank); chunking |
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the idempotent loader |
-| `src/secours_tech/bench.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), recall@k and MRR |
+| `src/secours_tech/bench.py`, `eval/` | Evaluation bench: case checks, frozen test split (fingerprint), hit@k, page recall@k, all@k and MRR |
 | `src/secours_tech/embed.py`, `rerank.py` | Chunk embeddings (`mistral-embed`, `multilingual-e5-base`) and local reranking (`bge-reranker-v2-m3`, BGE-M3 multi-vector; `--extra local`) |
 | `tests/` | Unit tests, and database tests against a dedicated `_test` database |
 | `corpus/sources.toml`, `collect.py` | Official sources and the monthly watch |
