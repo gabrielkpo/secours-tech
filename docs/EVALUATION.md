@@ -10,19 +10,20 @@
   are never shown to a model.
 - **The set (J2).** 31 cases: 11 simple questions, 5 complex situations, 5 tasks per function,
   5 questions outside the doctrine, 3 traps and 2 medical ones. 282 excerpts back them;
-  `bench check` finds every one word for word on its PDF page, and 268 of the 274 excerpts of
-  answered cases in the indexed text of that page. The other six, in one frozen test case, were
-  copied from an earlier extraction that glued words together; correcting them means freezing
-  the test split again, which is not done yet.
+  `bench check`, run in the Docker image, finds every one word for word on its PDF page and,
+  for the 274 excerpts of answered cases, in the indexed text of that page (with the Homebrew
+  poppler 26.04, six excerpts of one guide fail on the PDF: it glues their words together).
 - **Out of Git.** The cases quote the doctrine, whose reproduction rights are reserved, so they
   stay in `data/eval/cases/`. What is versioned: the fingerprint of the test split
   (`eval/frozen-test.sha256`), its change log (`eval/frozen-test-history.md`) and the scores of
   every run (`eval/runs/`).
 - **A frozen test split.** 9 cases (30 %, drawn in every category with a fixed seed) are kept
   for one final run (J10). The bench refuses to run when a test case differs from the
-  fingerprint, scores the test split only with `--final`, and once per setup and case set. One
-  correction was made before any test score: 18 excerpts re-copied from the indexed text and one
-  excerpt on a contents page removed, with questions and expected answers unchanged.
+  fingerprint, scores the test split only with `--final`, and once per setup and case set. Two
+  corrections were made before any test score, each logged with its old and new fingerprint:
+  excerpts re-copied from the indexed text (accents stored apart, then words glued by one
+  poppler version) and one excerpt on a contents page removed, with questions and expected
+  answers unchanged.
 - **Retrieval scores.** A run ranks the pages of the first 50 chunks, each page counted once.
   For each answered case (refusal cases are scored with the answers, J4):
   - hit@k: an expected page is among the first k pages;
