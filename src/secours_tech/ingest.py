@@ -25,13 +25,28 @@ class Chunk:
     section: int | None = None  # index in the document's sections, None when it has none
 
 
+def _cut_at(sentence: str, size: int) -> int:
+    """Where to cut a too-long sentence: the last space that fits and does not sit between two
+    digits (French groups thousands with a space: "180 000"), else the last space that fits,
+    else -1."""
+    fallback = -1
+    cut = sentence.rfind(" ", 1, size + 1)
+    while cut > 0:
+        if not (sentence[cut - 1].isdigit() and sentence[cut + 1 : cut + 2].isdigit()):
+            return cut
+        if fallback < 0:
+            fallback = cut
+        cut = sentence.rfind(" ", 1, cut)
+    return fallback
+
+
 def _split_long(sentence: str, size: int) -> list[str]:
-    """A sentence longer than `size`, cut at the last space that fits: a word or a number is
-    never split ("180 000 m3" must not become "1" and "80 000 m3"). Only a single token longer
-    than `size` is cut hard."""
+    """A sentence longer than `size`, cut at a space that fits: a word or a number is never
+    split ("180 000 m3" must not become "180" and "000 m3"). Only a single token longer than
+    `size` is cut hard."""
     parts: list[str] = []
     while len(sentence) > size:
-        cut = sentence.rfind(" ", 1, size + 1)
+        cut = _cut_at(sentence, size)
         if cut <= 0:
             cut = size  # one token longer than a chunk: no space to cut at
             parts.append(sentence[:cut])

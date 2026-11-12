@@ -40,6 +40,16 @@ def test_overlong_sentence_is_cut_at_a_space_never_inside_a_number():
     assert all(set(chunk.split()) <= tokens for chunk in chunks)
 
 
+def test_a_number_grouped_by_a_space_is_not_cut():
+    # the limit falls between "180" and "000": the cut moves before the whole number
+    text = "x" * 782 + " de 10 000 à 180 000 m3 selon les cellules"
+    last_space = text.rfind(" ", 0, 801)
+    assert text[last_space - 3 : last_space + 4] == "180 000"  # the naive cut splits the number
+    chunks = chunk_text(text, size=800, overlap=0)
+    assert any("180 000 m3" in chunk for chunk in chunks)
+    assert not any(chunk.startswith("000") for chunk in chunks)
+
+
 def test_invalid_size_is_rejected():
     with pytest.raises(ValueError):
         chunk_text("abc", size=0)
