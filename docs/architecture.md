@@ -74,9 +74,9 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
 - **Each chunk records how its text was extracted** (`extraction`: `text_layer` or `ocr`), so the
   effect of OCR on retrieval and citations can be measured.
 - **A note mark never joins a number.** The plain text layer writes a raised note mark against
-  the number before it ("2023" then a small raised "61" reads "202361"); the word boxes of
+  the number before it ("1998" then a small raised "4" reads "19984"); the word boxes of
   `pdftotext -tsv` find smaller, raised digits touching a number, and the text keeps them apart
-  with a caret ("2023^61", "150^21"). OCR text follows the same rule.
+  with a caret ("1998^4", "10^3"). OCR text follows the same rule.
 - **Each page is routed, not guessed.** `pdftotext` (poppler) reads the text layer; `pdfimages`
   counts the images and the high-resolution 1-bit masks, which is how the ministry's Word
   exports draw lines of text. A page goes to `text_layer` (enough clean letters), `ocr` (3+ text

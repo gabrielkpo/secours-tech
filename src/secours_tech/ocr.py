@@ -184,7 +184,7 @@ def ocr_page(pdf: Path, page: int, model_dir: Path = MODEL_DIR) -> OcrResult:
 
 
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻₀₁₂₃₄₅₆₇₈₉", "0123456789-0123456789")
-# raised digits right after a digit: a note mark ("2022¹⁶") or a power ("10³"), never more digits
+# raised digits right after a digit: a note mark ("1998⁴") or a power ("10³"), never more digits
 _RAISED_AFTER_DIGIT = re.compile(r"(?<=\d)(?:(⁻?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)|<sup>\s*(-?\d+)\s*</sup>)")
 _POWER_AFTER_DIGIT = re.compile(r"(?<=\d)\s*\}?\s*\^\s*\{?\s*(-?\s*\d+)\s*\}?")
 _IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
@@ -208,8 +208,8 @@ def markdown_to_text(markdown: str) -> str:
     Pictures are dropped (they hold no text here), table pipes and rules become spaces, heading
     marks and emphasis go, and superscripts after a letter ("accident³⁰", "m³", "$H_{2}$") become
     plain digits written inline, as in the PDF text layer. Raised digits after a digit are kept
-    apart with a caret ("2022¹⁶" -> "2022^16", "$10^{3}$" -> "10^3"): written inline they would
-    make another number (202216, 103).
+    apart with a caret ("1998⁴" -> "1998^4", "$10^{3}$" -> "10^3"): written inline they would
+    make another number (19984, 103).
     """
     text = _RAISED_AFTER_DIGIT.sub(
         lambda m: "^" + (m.group(1) or m.group(2)).translate(_SUPERSCRIPTS), markdown

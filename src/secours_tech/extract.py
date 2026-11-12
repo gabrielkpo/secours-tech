@@ -175,8 +175,8 @@ RAISED_GAP = 0.3  # ...and it touches the word (gap as a share of the word's hei
 
 def _raised_digits(path: Path, pages: int) -> list[list[tuple[str, str]]]:
     """Per page, the (word, raised digits) pairs where small raised digits touch a word ending
-    in a digit: a note mark ("2023" then "61") or a power ("10" then "3"). The plain text layer
-    writes them as one number ("202361"); word boxes tell them apart. Read from `pdftotext -tsv`
+    in a digit: a note mark ("1998" then "4") or a power ("10" then "3"). The plain text layer
+    writes them as one number ("19984"); word boxes tell them apart. Read from `pdftotext -tsv`
     (poppler 26.04 aborts on some guides in -bbox mode)."""
     words: list[list[tuple[float, float, float, float, str]]] = [[] for _ in range(pages)]
     for row in _run("pdftotext", "-tsv", "-enc", "UTF-8", str(path), "-").splitlines()[1:]:
@@ -204,7 +204,7 @@ def _raised_digits(path: Path, pages: int) -> list[list[tuple[str, str]]]:
 
 
 def mark_raised(text: str, pairs: list[tuple[str, str]]) -> str:
-    """The page text with each raised mark set apart by a caret ("202361" -> "2023^61"), in
+    """The page text with each raised mark set apart by a caret ("19984" -> "1998^4"), in
     reading order; a pair not found written as one number is left alone."""
     out, start = [], 0
     for base, mark in pairs:
