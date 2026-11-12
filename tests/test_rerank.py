@@ -28,5 +28,8 @@ def test_reranked_retrieval_reads_the_chunk_inputs(conn):
         SourceDocument("GDO-test.pdf", "a" * 64, texts, pages),
         Entry("GDO", "Test", "https://example.org/GDO-test.pdf", "a" * 64),
     )
-    candidates = lambda question: _fulltext_chunks(conn, question, 50)
+
+    def candidates(question):
+        return _fulltext_chunks(conn, question, 50)
+
     assert reranked(conn, candidates, SiloFirst())("gaz")[0] == ("GDO-test.pdf", 2)

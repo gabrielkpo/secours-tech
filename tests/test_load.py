@@ -292,7 +292,8 @@ def test_sections_are_stored_and_chunks_carry_their_section_and_context(conn):
     ]  # fmt: skip
     # the table of contents page gives no chunk, and the context is searched with the text
     found = conn.execute(
-        "SELECT count(*) FROM chunks WHERE tsv @@ websearch_to_tsquery('fr', 'ventilation introduction')"
+        "SELECT count(*) FROM chunks"
+        " WHERE tsv @@ websearch_to_tsquery('fr', 'ventilation introduction')"
     ).fetchone()[0]
     assert found == 1
 
@@ -390,7 +391,7 @@ def test_the_loader_fails_when_a_guide_of_the_manifest_has_no_current_edition(
     manifest = tmp_path / "sources.toml"
     Manifest([], [listed, absent]).dump(manifest)
     monkeypatch.setattr(load, "connect", lambda: contextlib.nullcontext(conn))
-    with pytest.raises(SystemExit, match="1 guide.* no current edition: Silos"):
+    with pytest.raises(SystemExit, match=r"1 guide.* no current edition: Silos"):
         load.main([str(pdf.parent), "--manifest", str(manifest)])
     assert conn.execute("SELECT url FROM documents WHERE retired_at IS NULL").fetchall() == [
         ("https://example.org/gaz.pdf",)
@@ -404,7 +405,7 @@ def test_the_loader_refuses_a_pdf_outside_the_manifest(make_pdf, tmp_path, monke
     manifest = tmp_path / "sources.toml"
     manifest.write_text("", encoding="utf-8")
     monkeypatch.setattr(load, "connect", lambda: pytest.fail("nothing may be loaded"))
-    with pytest.raises(SystemExit, match="not in .* nothing is loaded: GDO-old.pdf"):
+    with pytest.raises(SystemExit, match=r"not in .* nothing is loaded: GDO-old\.pdf"):
         load.main([str(folder), "--manifest", str(manifest)])
     with pytest.raises(SystemExit, match="no manifest"):
         load.main([str(folder), "--manifest", str(tmp_path / "missing.toml")])

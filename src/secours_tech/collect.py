@@ -131,9 +131,10 @@ def parse_listing(html: str, page_url: str, include: str | None = None) -> list[
 
 def fetch(url: str) -> tuple[int, str | None]:
     """HTTP status and body. The bot says who it is; a 403 is reported, not worked around."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        # the URLs come from the reviewed manifest (official https pages)
+        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
             return response.status, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, None
@@ -247,7 +248,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.report:
             args.report.write_text(text, encoding="utf-8")
         if output := os.environ.get("GITHUB_OUTPUT"):
-            with open(output, "a", encoding="utf-8") as fh:
+            with Path(output).open("a", encoding="utf-8") as fh:
                 fh.write(f"action={'true' if report.needs_action else 'false'}\n")
         return
 

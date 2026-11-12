@@ -48,4 +48,7 @@ jobs:
       - run: uv run python -c "from secours_tech.ocr import fetch_model; fetch_model()"
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run pytest -rs  # -rs prints why a test was skipped, so a missing database shows up
+      - run: uv run mypy  # static types of src (settings in pyproject.toml)
+      # -rs prints why a test was skipped, so a missing database shows up; the coverage floor is
+      # in pyproject.toml
+      - run: uv run pytest -rs --cov --cov-report=term

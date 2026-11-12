@@ -20,6 +20,14 @@ def connect(url: str | None = None) -> psycopg.Connection:
     return psycopg.connect(url, autocommit=True)
 
 
+def one(cursor: psycopg.Cursor) -> tuple:
+    """The row a query always returns (an aggregate, an INSERT ... RETURNING, a known id)."""
+    row = cursor.fetchone()
+    if row is None:
+        raise LookupError("the query returned no row")
+    return row
+
+
 def migrate(conn: psycopg.Connection) -> list[str]:
     """Apply, in name order, every migration file not applied yet. Returns the applied names.
 

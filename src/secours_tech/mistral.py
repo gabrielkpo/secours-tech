@@ -33,14 +33,15 @@ def api_key(env_file: Path = Path(".env")) -> str:
 
 def post(path: str, payload: dict, key: str, timeout: int = 120) -> dict:
     """POST JSON to the API; waits and retries on the rate limit (429), a 5xx or a network error."""
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - API is a constant https URL
         f"{API}/{path}",
         data=json.dumps(payload).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     )
     for attempt in range(RETRIES):
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            # API is a constant https URL
+            with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
                 return json.load(response)
         except urllib.error.HTTPError as error:
             retryable = error.code == 429 or error.code >= 500

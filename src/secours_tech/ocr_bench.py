@@ -135,14 +135,14 @@ def sample(
     again: a validation sample stays apart from the one the engine was tuned on.
     """
     rows = conn.execute(
-        "SELECT d.filename, p.page FROM pages p JOIN documents d ON d.id = p.document_id"
+        "SELECT d.filename, p.page FROM pages p JOIN documents d ON d.id = p.document_id"  # noqa: S608
         f" WHERE {INDEXABLE} AND d.retired_at IS NULL ORDER BY d.filename, p.page"
     ).fetchall()
     by_guide: dict[str, list[int]] = {}
     for filename, page in rows:
         if (Path(filename).stem, page) not in exclude:
             by_guide.setdefault(filename, []).append(page)
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311 - a reproducible draw, not a secret
     return {
         name: sorted(rng.sample(pages, min(per_guide, len(pages))))
         for name, pages in by_guide.items()
@@ -200,7 +200,7 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
     """
     written = {}
     documents = conn.execute(
-        "SELECT DISTINCT d.id, d.filename FROM documents d JOIN pages p ON p.document_id = d.id"
+        "SELECT DISTINCT d.id, d.filename FROM documents d JOIN pages p ON p.document_id = d.id"  # noqa: S608
         f" WHERE d.retired_at IS NULL AND {INDEXABLE} ORDER BY d.filename"
     ).fetchall()
     for document_id, filename in documents:
@@ -215,7 +215,7 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             if guide is None or not guide.passed:
                 continue
             (engines,) = conn.execute(
-                "SELECT count(DISTINCT ocr_engine) + count(*) FILTER (WHERE ocr_engine IS NULL)"
+                "SELECT count(DISTINCT ocr_engine) + count(*) FILTER (WHERE ocr_engine IS NULL)"  # noqa: S608
                 f" FROM pages p WHERE p.document_id = %s AND {INDEXABLE}",
                 (document_id,),
             ).fetchone()
@@ -226,7 +226,7 @@ def index_guides(conn, guides: dict[str, GuideScore]) -> dict[str, int]:
             pages = [
                 page
                 for (page,) in conn.execute(
-                    f"SELECT p.page FROM pages p WHERE p.document_id = %s AND {INDEXABLE}"
+                    f"SELECT p.page FROM pages p WHERE p.document_id = %s AND {INDEXABLE}"  # noqa: S608
                     " ORDER BY p.page",
                     (document_id,),
                 ).fetchall()
@@ -332,7 +332,8 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         action="append",
         default=[],
-        help="folder of an earlier sample, whose transcribed pages are not drawn again (repeatable)",
+        help="folder of an earlier sample, whose transcribed pages are not drawn again"
+        " (repeatable)",
     )
     index = sub.add_parser(
         "index", help="index the OCR text of the guides that pass, and write the record"
@@ -371,7 +372,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.command == "index":
             guides = score_guides(conn, args.samples)
             written = index_guides(conn, guides)
-            engines = dict(
+            engines: dict[str, str] = dict(
                 conn.execute(
                     "SELECT d.filename, string_agg(DISTINCT p.ocr_engine, ' | ') FROM pages p"
                     " JOIN documents d ON d.id = p.document_id"
@@ -386,7 +387,8 @@ def main(argv: list[str] | None = None) -> None:
 
     for guide in guides.values():
         verdict = "PASS" if guide.passed else "FAIL"
-        print(f"{verdict}  CER {guide.cer:6.2%}  numbers {'exact' if guide.numbers_exact else 'WRONG'}"
+        numbers = "exact" if guide.numbers_exact else "WRONG"
+        print(f"{verdict}  CER {guide.cer:6.2%}  numbers {numbers}"
               f"  {len(guide.pages)} page(s)  {guide.guide}")  # fmt: skip
         for p in guide.pages:
             if p.missing_numbers or p.extra_numbers:

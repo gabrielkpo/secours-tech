@@ -13,7 +13,12 @@ dependencies = [
 local = ["torch==2.14.1", "transformers==5.21.0"]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "mypy==2.4.1",
+    "pytest>=8",
+    "pytest-cov==7.1.0",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling==1.33.0"]  # pinned: uv.lock does not lock the build backend
@@ -26,7 +31,37 @@ packages = ["src/secours_tech"]
 line-length = 100
 src = ["src", "tests"]
 
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF", "S", "PTH", "RET"]
+# every subprocess call takes an argument list (no shell) and looks poppler and tesseract up on
+# PATH on purpose
+ignore = ["S603", "S607"]
+# French typography, the dotless i of some PDFs and the "›" of the context headers, on purpose
+allowed-confusables = ["’", "‘", "–", "›", "ı"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
 [tool.uv]
 # The packages the `local` extra brought in were held to releases at least two weeks old when it
 # was added (11/11/2026); remove a line to let Dependabot move that package again.
-exclude-newer-package = { annotated-doc = "2026-10-28T00:00:00Z", anyio = "2026-10-28T00:00:00Z", click = "2026-10-28T00:00:00Z", cuda-bindings = "2026-10-28T00:00:00Z", cuda-pathfinder = "2026-10-28T00:00:00Z", filelock = "2026-10-28T00:00:00Z", hf-xet = "2026-10-28T00:00:00Z", huggingface-hub = "2026-10-28T00:00:00Z", markdown-it-py = "2026-10-28T00:00:00Z", nvidia-nvjitlink = "2026-10-28T00:00:00Z", pydantic = "2026-10-28T00:00:00Z", pydantic-core = "2026-10-28T00:00:00Z", regex = "2026-10-28T00:00:00Z", typer = "2026-10-28T00:00:00Z", typing-inspection = "2026-10-28T00:00:00Z" }
+exclude-newer-package = { annotated-doc = "2026-10-28T00:00:00Z", ast-serialize = "2026-10-29T00:00:00Z", coverage = "2026-10-29T00:00:00Z", mypy-extensions = "2026-10-29T00:00:00Z", anyio = "2026-10-28T00:00:00Z", click = "2026-10-28T00:00:00Z", cuda-bindings = "2026-10-28T00:00:00Z", cuda-pathfinder = "2026-10-28T00:00:00Z", filelock = "2026-10-28T00:00:00Z", hf-xet = "2026-10-28T00:00:00Z", huggingface-hub = "2026-10-28T00:00:00Z", markdown-it-py = "2026-10-28T00:00:00Z", nvidia-nvjitlink = "2026-10-28T00:00:00Z", pydantic = "2026-10-28T00:00:00Z", pydantic-core = "2026-10-28T00:00:00Z", regex = "2026-10-28T00:00:00Z", typer = "2026-10-28T00:00:00Z", typing-inspection = "2026-10-28T00:00:00Z" }
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# the optional `local` extra (not installed in CI)
+module = ["torch", "torch.*", "transformers", "transformers.*", "huggingface_hub"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["secours_tech"]
+
+[tool.coverage.report]
+# measured at 81 % when the gate was added; raise it as tests are added, never lower it
+fail_under = 80
+show_missing = true
+skip_covered = true

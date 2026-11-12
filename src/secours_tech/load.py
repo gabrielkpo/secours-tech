@@ -11,7 +11,7 @@ from pathlib import Path
 import psycopg
 
 from secours_tech.collect import MANIFEST, Entry, Manifest
-from secours_tech.db import connect, migrate
+from secours_tech.db import connect, migrate, one
 from secours_tech.extract import Page, extract_pages
 from secours_tech.ingest import Chunk, pages_to_chunks, strip_repeated_lines
 from secours_tech.structure import Section, detect_headings, locate, read_toc
@@ -106,17 +106,21 @@ def insert_sections(
 ) -> list[tuple[int, str]]:
     """Store a document's sections; returns (id, context "guide › … › section") per section."""
     rows = []
-    (start,) = conn.execute(
-        "SELECT coalesce(max(ordinal) + 1, 0) FROM sections WHERE document_id = %s",
-        (document_id,),
-    ).fetchone()
+    (start,) = one(
+        conn.execute(
+            "SELECT coalesce(max(ordinal) + 1, 0) FROM sections WHERE document_id = %s",
+            (document_id,),
+        )
+    )
     for ordinal, section in enumerate(sections, start=start):
         path = " › ".join(section.path)
-        (section_id,) = conn.execute(
-            "INSERT INTO sections (document_id, ordinal, level, title, path, page, origin)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-            (document_id, ordinal, section.level, section.title, path, section.page, origin),
-        ).fetchone()
+        (section_id,) = one(
+            conn.execute(
+                "INSERT INTO sections (document_id, ordinal, level, title, path, page, origin)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                (document_id, ordinal, section.level, section.title, path, section.page, origin),
+            )
+        )
         rows.append((section_id, f"{title} › {path}"))
     return rows
 
@@ -200,9 +204,9 @@ def store_document(
                 (doc.sha256, doc.filename, entry.title, entry.family, document_id),
             )
             log.info("%s: same text as the loaded edition, its new bytes pinned", doc.filename)
-            return conn.execute(
-                "SELECT count(*) FROM chunks WHERE document_id = %s", (document_id,)
-            ).fetchone()[0]
+            return one(
+                conn.execute("SELECT count(*) FROM chunks WHERE document_id = %s", (document_id,))
+            )[0]
         chunks = pages_to_chunks(
             doc.filename, doc.page_texts, sections=doc.sections, skip=doc.toc_pages
         )
@@ -216,26 +220,28 @@ def store_document(
             ).fetchone()
             if previous:
                 version = previous[0] + 1
-        row = conn.execute(
-            """
+        row = one(
+            conn.execute(
+                """
             INSERT INTO documents (filename, title, family, source, url, sha256, content_sha256,
                                    version, page_count, textless_page_count)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (
-                doc.filename,
-                entry.title if entry else title_of(doc.filename),
-                entry.family if entry else family_of(doc.filename),
-                "web" if entry else "local",
-                entry.url if entry else None,
-                doc.sha256,
-                doc.content_sha256,
-                version,
-                len(doc.page_texts),
-                textless,
-            ),
-        ).fetchone()
+                (
+                    doc.filename,
+                    entry.title if entry else title_of(doc.filename),
+                    entry.family if entry else family_of(doc.filename),
+                    "web" if entry else "local",
+                    entry.url if entry else None,
+                    doc.sha256,
+                    doc.content_sha256,
+                    version,
+                    len(doc.page_texts),
+                    textless,
+                ),
+            )
+        )
         title = entry.title if entry else title_of(doc.filename)
         sections = insert_sections(conn, row[0], title, doc.sections, doc.sections_origin)
         copy_chunks(conn, row[0], chunks, sections=sections, title=title)
@@ -274,14 +280,14 @@ def reextract_document(conn: psycopg.Connection, document_id: int, doc: SourceDo
         conn.execute(
             "DELETE FROM sections WHERE document_id = %s AND origin <> 'ocr'", (document_id,)
         )
-        (title,) = conn.execute(
-            "SELECT title FROM documents WHERE id = %s", (document_id,)
-        ).fetchone()
+        (title,) = one(conn.execute("SELECT title FROM documents WHERE id = %s", (document_id,)))
         sections = insert_sections(conn, document_id, title, doc.sections, doc.sections_origin)
-        start = conn.execute(
-            "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
-            (document_id,),
-        ).fetchone()[0]
+        start = one(
+            conn.execute(
+                "SELECT coalesce(max(position) + 1, 0) FROM chunks WHERE document_id = %s",
+                (document_id,),
+            )
+        )[0]
         copy_chunks(conn, document_id, chunks, start, sections=sections, title=title)
         renumber_chunks(conn, document_id)
         for p in doc.pages:
@@ -306,15 +312,17 @@ def sync_with_manifest(conn: psycopg.Connection, entries: list[Entry]) -> tuple[
     restored. Returns (retired, restored).
     """
     listed = ([entry.url for entry in entries], [entry.sha256 for entry in entries])
+    # a constant fragment; the URLs and hashes are bound parameters
     pairs = "(url, sha256) IN (SELECT * FROM unnest(%s::text[], %s::text[]))"
     with conn.transaction():
         retired = conn.execute(
-            "UPDATE documents SET retired_at = now()"
+            "UPDATE documents SET retired_at = now()"  # noqa: S608
             f" WHERE source = 'web' AND retired_at IS NULL AND NOT {pairs}",
             listed,
         ).rowcount
         restored = conn.execute(
-            f"UPDATE documents SET retired_at = NULL WHERE source = 'web' AND retired_at IS NOT NULL AND {pairs}",
+            "UPDATE documents SET retired_at = NULL"  # noqa: S608
+            f" WHERE source = 'web' AND retired_at IS NOT NULL AND {pairs}",
             listed,
         ).rowcount
     return retired, restored
@@ -372,17 +380,17 @@ def main(argv: list[str] | None = None) -> None:
                 if not args.reextract:
                     log.info("%s: already loaded, skipped", pdf.name)
                     continue
-                (document_id,) = conn.execute(
-                    "SELECT id FROM documents WHERE sha256 = %s", (sha,)
-                ).fetchone()
+                (document_id,) = one(
+                    conn.execute("SELECT id FROM documents WHERE sha256 = %s", (sha,))
+                )
                 count = reextract_document(conn, document_id, read_source(pdf, data))
                 log.info("%s: extracted again, %d chunks", pdf.name, count)
                 continue
-            count = store_document(conn, read_source(pdf, data), official.get(sha))
-            if count is None:
+            stored = store_document(conn, read_source(pdf, data), official.get(sha))
+            if stored is None:
                 log.info("%s: same text as a loaded document, skipped", pdf.name)
             else:
-                log.info("%s: %d chunks", pdf.name, count)
+                log.info("%s: %d chunks", pdf.name, stored)
         if official:
             retired, restored = sync_with_manifest(conn, list(official.values()))
             if retired or restored:

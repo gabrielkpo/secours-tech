@@ -178,7 +178,8 @@ def locate(entries: list[Entry], page_texts: list[str], toc_pages: set[int]) -> 
     )
     shift = votes.most_common(1)[0][0] if votes else 0
     if not entries or votes[shift] < MIN_FOUND * len(entries):
-        return []  # a garbled or misread table of contents gives no structure rather than a wrong one
+        # a garbled or misread table of contents gives no structure rather than a wrong one
+        return []
     sections: list[Section] = []
     stack: list[tuple[int, str]] = []
     for entry in entries:

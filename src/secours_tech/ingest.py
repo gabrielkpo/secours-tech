@@ -157,7 +157,8 @@ def strip_repeated_lines(
     counts: dict[tuple[str, str], int] = {}
     offsets: dict[int, int] = {}
     for lines, zones, number, single in zip(split, zoned, numbers, once, strict=True):
-        keys, shifts = set(), set()
+        keys: set[tuple[str, str]] = set()
+        shifts: set[int] = set()
         for i, names in zones.items():
             line = lines[i].strip()
             if _WORD.search(line) or not _NUMBER.search(line):

@@ -252,7 +252,7 @@ def assign_splits(
     left = round(len(cases) * share) - sum(taken.values())
     for category in sorted(quotas, key=lambda c: (taken[c] - quotas[c], c))[:left]:
         taken[category] += 1
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311 - a reproducible draw, not a secret
     test = set()
     for category in sorted(by_category):
         test.update(rng.sample(sorted(by_category[category]), taken[category]))
@@ -587,9 +587,9 @@ def main(argv: list[str] | None = None) -> None:
             model = EMBEDDERS[args.model]
             # a chunk without a vector is invisible to the vector search: scores would be biased;
             # checked before the model is loaded
-            if missing := len(missing_inputs(conn, model.name)):
+            if absent := len(missing_inputs(conn, model.name)):
                 raise SystemExit(
-                    f"{missing} chunk inputs have no {model.name} vector: "
+                    f"{absent} chunk inputs have no {model.name} vector: "
                     f"run `python -m secours_tech.embed --model {args.model}` first"
                 )
             embedder = model()
