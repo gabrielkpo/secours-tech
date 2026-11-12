@@ -386,15 +386,16 @@ def test_the_loader_fails_when_a_guide_of_the_manifest_has_no_current_edition(
     from secours_tech.collect import Manifest
 
     pdf = make_pdf(["Couper le gaz avant de ventiler le local."], name="GDO-gaz.pdf")
-    listed = Entry("GDO", "Gaz", "https://example.org/gaz.pdf", sha256_of(pdf.read_bytes()))
-    absent = Entry("GDO", "Silos", "https://example.org/silos.pdf", "c" * 64)
+    site = "https://www.securite-civile.interieur.gouv.fr"
+    listed = Entry("GDO", "Gaz", f"{site}/gaz.pdf", sha256_of(pdf.read_bytes()))
+    absent = Entry("GDO", "Silos", f"{site}/silos.pdf", "c" * 64)
     manifest = tmp_path / "sources.toml"
     Manifest([], [listed, absent]).dump(manifest)
     monkeypatch.setattr(load, "connect", lambda: contextlib.nullcontext(conn))
     with pytest.raises(SystemExit, match=r"1 guide.* no current edition: Silos"):
         load.main([str(pdf.parent), "--manifest", str(manifest)])
     assert conn.execute("SELECT url FROM documents WHERE retired_at IS NULL").fetchall() == [
-        ("https://example.org/gaz.pdf",)
+        (f"{site}/gaz.pdf",)
     ]
 
 

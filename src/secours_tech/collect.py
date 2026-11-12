@@ -9,6 +9,7 @@ download (fingerprints, versions, retired guides, indexing) is automatic.
 import argparse
 import hashlib
 import os
+import re
 import shutil
 import sys
 import tomllib
@@ -20,6 +21,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 USER_AGENT = "secours-tech-corpus-watch/0.1 (+https://github.com/gabrielkpo/secours-tech)"
+OFFICIAL = "https://www.securite-civile.interieur.gouv.fr/"
+FAMILIES = ("GDO", "GTO", "PSE", "SSUAP")
+MAX_PAGE = 5_000_000  # bytes; a listing page is a few hundred kilobytes
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 MANIFEST = Path("corpus/sources.toml")
 
 
@@ -46,6 +51,19 @@ class Entry:
         return urllib.parse.unquote(self.url.rsplit("/", 1)[-1])
 
 
+def _check_entry(path: Path, item: dict) -> None:
+    """A manifest entry points to the ministry's https site, names a known family and, for a
+    document, pins a well-formed SHA-256: anything else is refused before it is fetched or
+    loaded."""
+    url, family, sha = item.get("url", ""), item.get("family"), item.get("sha256")
+    if not url.startswith(OFFICIAL):
+        raise ValueError(f"{path}: {url!r} is not on {OFFICIAL}")
+    if family not in FAMILIES:
+        raise ValueError(f"{path}: unknown family {family!r} for {url}")
+    if "title" in item and not (isinstance(sha, str) and _SHA256.fullmatch(sha)):
+        raise ValueError(f"{path}: malformed sha256 for {url}")
+
+
 @dataclass
 class Manifest:
     listings: list[Listing]
@@ -56,6 +74,8 @@ class Manifest:
     def load(cls, path: Path) -> "Manifest":
         text = path.read_text(encoding="utf-8")
         data = tomllib.loads(text)
+        for item in [*data.get("listing", []), *data.get("document", [])]:
+            _check_entry(path, item)
         header = []
         for line in text.splitlines():  # the leading comment block is kept on dump
             if not line.startswith("#"):
@@ -130,12 +150,18 @@ def parse_listing(html: str, page_url: str, include: str | None = None) -> list[
 
 
 def fetch(url: str) -> tuple[int, str | None]:
-    """HTTP status and body. The bot says who it is; a 403 is reported, not worked around."""
+    """HTTP status and body of an official https page. The bot says who it is; a 403 is
+    reported, not worked around; a page larger than MAX_PAGE is reported as unreadable."""
+    if not url.startswith(OFFICIAL):
+        raise ValueError(f"not an official page: {url}")
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310
     try:
-        # the URLs come from the reviewed manifest (official https pages)
+        # the URL was just checked: https on the ministry's host
         with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310
-            return response.status, response.read().decode("utf-8", errors="replace")
+            body = response.read(MAX_PAGE + 1)
+            if len(body) > MAX_PAGE:
+                return 0, None
+            return response.status, body.decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, None
     except OSError:  # URLError, timeouts, connection resets
