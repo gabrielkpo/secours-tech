@@ -240,7 +240,8 @@ def evaluate(
 
 
 def _fulltext_chunks(conn, question: str, limit: int) -> list[tuple[int, str, int]]:
-    """(chunk id, document, page) by French full text, any word of the question (OR)."""
+    """(chunk id, document, page) by French full text, any word of the question (OR), in the
+    current official guides only (a file outside the manifest is never cited as doctrine)."""
     words = re.findall(r"\w+", question)
     if not words:
         return []
@@ -249,7 +250,7 @@ def _fulltext_chunks(conn, question: str, limit: int) -> list[tuple[int, str, in
         SELECT c.id, d.filename, c.page
         FROM chunks c JOIN documents d ON d.id = c.document_id,
              websearch_to_tsquery('fr', %s) q
-        WHERE d.retired_at IS NULL AND c.tsv @@ q
+        WHERE d.retired_at IS NULL AND d.source = 'web' AND c.tsv @@ q
         ORDER BY ts_rank_cd(c.tsv, q) DESC, c.id
         LIMIT %s
         """,
@@ -266,7 +267,7 @@ def _vector_chunks(conn, embedder, question: str, limit: int) -> list[tuple[int,
         SELECT c.id, d.filename, c.page
         FROM chunks c JOIN documents d ON d.id = c.document_id
              JOIN embeddings e ON e.model = %s AND e.input_sha256 = c.input_sha256
-        WHERE d.retired_at IS NULL
+        WHERE d.retired_at IS NULL AND d.source = 'web'
         ORDER BY e.embedding <=> %s::vector, c.id
         LIMIT %s
         """,
