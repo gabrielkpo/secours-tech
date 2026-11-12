@@ -263,11 +263,14 @@ def describe(pdf: Path) -> str:
     """Page count, title and modification date of a PDF, to tell two editions apart."""
     import pikepdf
 
-    with pikepdf.open(pdf) as document:
-        info = document.docinfo
-        title = str(info.get("/Title", "")) or "no title"
-        modified = str(info.get("/ModDate", "")) or "no date"
-        return f"{len(document.pages)} pages, title {title!r}, modified {modified}"
+    try:
+        with pikepdf.open(pdf) as document:
+            info = document.docinfo
+            title = str(info.get("/Title", "")) or "no title"
+            modified = str(info.get("/ModDate", "")) or "no date"
+            return f"{len(document.pages)} pages, title {title!r}, modified {modified}"
+    except pikepdf.PdfError as error:  # a truncated download is the case this is for
+        return f"unreadable PDF ({error})"
 
 
 def register(

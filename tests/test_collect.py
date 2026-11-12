@@ -180,3 +180,11 @@ def test_register_explains_a_refused_new_version(tmp_path: Path, make_pdf, capsy
     assert "--accept-new-version" in out
     main([*argv, "--accept-new-version", pdf.name])
     assert Manifest.load(path).documents[0].sha256 == hashlib.sha256(pdf.read_bytes()).hexdigest()
+
+
+def test_a_truncated_download_is_described_not_crashed_on(tmp_path: Path):
+    from secours_tech.collect import describe
+
+    broken = tmp_path / "x.pdf"
+    broken.write_bytes(b"%PDF-1.4 truncated")
+    assert describe(broken).startswith("unreadable PDF")
