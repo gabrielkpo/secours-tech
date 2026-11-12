@@ -9,6 +9,7 @@ from secours_tech.load import (
     family_of,
     is_loaded,
     read_source,
+    sha256_of,
     store_document,
     sync_with_manifest,
     title_of,
@@ -354,3 +355,42 @@ def test_reextract_keeps_the_sections_read_from_ocr_text(conn):
     assert (
         conn.execute("SELECT count(*) FROM chunks WHERE section_id IS NOT NULL").fetchone()[0] == 2
     )
+
+
+def test_a_republished_file_with_the_same_text_stays_current(conn):
+    # collect register pins new bytes (re-signed, re-exported) whose text did not change
+    url = "https://example.org/silos.pdf"
+    store_document(conn, DOC, Entry("GDO", "Silos", url, DOC.sha256))
+    resigned = SourceDocument(DOC.filename, "e" * 64, DOC.page_texts)
+    pinned = Entry("GDO", "Silos", url, resigned.sha256)
+    assert store_document(conn, resigned, pinned) == 2  # its chunks are kept
+    assert sync_with_manifest(conn, [pinned]) == (0, 0)
+    rows = conn.execute("SELECT sha256, retired_at IS NULL FROM documents").fetchall()
+    assert rows == [(resigned.sha256, True)]
+
+
+def test_a_guide_with_ocr_pages_is_fingerprinted_by_its_file():
+    pages = (Page(1, "Titre.", "text_layer", 30, 0, 0, 1.0), Page(2, "", "ocr", 0, 9, 1, 1.0))
+    edition = SourceDocument("GTO-test.pdf", "f" * 64, ["Titre.", ""], pages)
+    assert edition.content_sha256 == edition.sha256  # its drawn pages are not in its text
+
+
+def test_the_loader_fails_when_a_guide_of_the_manifest_has_no_current_edition(
+    conn, make_pdf, tmp_path, monkeypatch
+):
+    import contextlib
+
+    from secours_tech import load
+    from secours_tech.collect import Manifest
+
+    pdf = make_pdf(["Couper le gaz avant de ventiler le local."], name="GDO-gaz.pdf")
+    listed = Entry("GDO", "Gaz", "https://example.org/gaz.pdf", sha256_of(pdf.read_bytes()))
+    absent = Entry("GDO", "Silos", "https://example.org/silos.pdf", "c" * 64)
+    manifest = tmp_path / "sources.toml"
+    Manifest([], [listed, absent]).dump(manifest)
+    monkeypatch.setattr(load, "connect", lambda: contextlib.nullcontext(conn))
+    with pytest.raises(SystemExit, match="1 guide.* no current edition: Silos"):
+        load.main([str(pdf.parent), "--manifest", str(manifest)])
+    assert conn.execute("SELECT url FROM documents WHERE retired_at IS NULL").fetchall() == [
+        ("https://example.org/gaz.pdf",)
+    ]

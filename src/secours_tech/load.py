@@ -33,10 +33,13 @@ class SourceDocument:
     def content_sha256(self) -> str:
         """Fingerprint of the extracted text, page breaks included.
 
-        A document with no text at all (fully scanned) falls back to its file fingerprint:
-        two different scans of the same length would otherwise share the empty-text hash.
+        A document with no text at all (fully scanned), or with any page whose text is drawn as
+        images (routed to OCR), falls back to its file fingerprint: the text layer does not
+        cover those pages, so two editions that differ only there would share it.
         """
-        if not any(text.strip() for text in self.page_texts):
+        if not any(text.strip() for text in self.page_texts) or any(
+            page.route == "ocr" for page in self.pages
+        ):
             return self.sha256
         return hashlib.sha256("\f".join(self.page_texts).encode("utf-8")).hexdigest()
 
@@ -172,15 +175,32 @@ def store_document(
     `entry` is the manifest record of an official guide (family, title, URL). When a current
     version with the same URL exists, it is retired and the new row gets the next version.
     Returns the number of chunks, or None when a file with the same bytes or the same extracted
-    text is already loaded, so running the loader twice changes nothing.
+    text is already loaded, so running the loader twice changes nothing. An official file with
+    new bytes but the same text as the loaded edition at its URL (re-signed, re-exported) takes
+    that row's place: its SHA-256 is pinned on it, and it is current again.
     """
     with conn.transaction():
         duplicate = conn.execute(
-            "SELECT 1 FROM documents WHERE sha256 = %s OR content_sha256 = %s",
+            "SELECT id, sha256, url FROM documents WHERE sha256 = %s OR content_sha256 = %s",
             (doc.sha256, doc.content_sha256),
         ).fetchone()
         if duplicate:
-            return None
+            document_id, sha256, url = duplicate
+            if entry is None or sha256 == doc.sha256 or url != entry.url:
+                return None
+            conn.execute(
+                "UPDATE documents SET retired_at = now() WHERE url = %s AND retired_at IS NULL"
+                " AND id <> %s",
+                (url, document_id),
+            )
+            conn.execute(
+                "UPDATE documents SET sha256 = %s, filename = %s, retired_at = NULL WHERE id = %s",
+                (doc.sha256, doc.filename, document_id),
+            )
+            log.info("%s: same text as the loaded edition, its new bytes pinned", doc.filename)
+            return conn.execute(
+                "SELECT count(*) FROM chunks WHERE document_id = %s", (document_id,)
+            ).fetchone()[0]
         chunks = pages_to_chunks(
             doc.filename, doc.page_texts, sections=doc.sections, skip=doc.toc_pages
         )
@@ -348,6 +368,25 @@ def main(argv: list[str] | None = None) -> None:
             retired, restored = sync_with_manifest(conn, list(official.values()))
             if retired or restored:
                 log.info("manifest sync: %d guide(s) retired, %d restored", retired, restored)
+            missing = [entry.title for entry in official.values() if not _is_current(conn, entry)]
+            if missing:
+                # a guide of the manifest left without a current edition would vanish from the
+                # answers with no other sign
+                raise SystemExit(
+                    f"{len(missing)} guide(s) of the manifest have no current edition: "
+                    + "; ".join(sorted(missing))
+                    + ". Put their PDF in the folder and run the loader again."
+                )
+
+
+def _is_current(conn: psycopg.Connection, entry: Entry) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM documents WHERE url = %s AND sha256 = %s AND retired_at IS NULL",
+            (entry.url, entry.sha256),
+        ).fetchone()
+        is not None
+    )
 
 
 if __name__ == "__main__":
