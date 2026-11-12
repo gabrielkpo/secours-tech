@@ -138,8 +138,8 @@ dev cases: right page in the first 5 pages for 62 % of the cases, in the first 2
 
 **Retrieval so far (J3, 11/11/2026, 16 answered dev cases).** A page counts once; the expected
 pages are those of the expected excerpts. hit@k: an expected page among the first k pages (one
-page of a case is enough; the share of each case's pages found, recall@k, comes with the run
-records).
+page of a case is enough); `bench run` also prints recall@k, the share of each case's pages
+found, and all@k.
 
 | Retriever | hit@5 | hit@20 | MRR |
 |---|---|---|---|
