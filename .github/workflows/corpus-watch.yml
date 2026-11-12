@@ -12,9 +12,13 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      # setup-uv publishes no moving major tag, so it is pinned to the v10.3.0 commit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false  # no token left in .git/config for later steps
+      # every action is pinned to a commit SHA, its version in the trailing comment; Dependabot
+      # moves both
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           python-version: "3.11"

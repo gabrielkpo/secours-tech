@@ -16,7 +16,7 @@ local = ["torch==2.14.1", "transformers==5.21.0"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling==1.33.0"]  # pinned: uv.lock does not lock the build backend
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
