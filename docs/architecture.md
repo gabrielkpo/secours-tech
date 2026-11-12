@@ -26,8 +26,8 @@ question -> guardrails -> retrieve top-k -> generate (Mistral) -> citation check
   category with a fixed seed, form the test split; `eval/frozen-test.sha256` holds the SHA-256 of
   those files, and `bench` refuses to run once a test case differs from it. Corrected test
   cases can be frozen again (`bench refreeze`) only while no test record exists, and each change
-  is logged in `eval/frozen-test-history.md`. The test split is scored only with `--final`. Retrieval is scored on the pages of the expected excerpts (2 to
-  13 per case), counted once in retrieval order: hit@k (an expected page among the first k),
+  is logged in `eval/frozen-test-history.md`. The test split is scored only with `--final`.
+  Retrieval is scored on the pages of the expected excerpts (2 to 13 per case), counted once in retrieval order: hit@k (an expected page among the first k),
   recall@k (share of the expected pages among the first k), all@k (every expected page among
   the first k) and MRR (first expected page); refusal cases are left to the answer scores of
   J4. hit@k alone overstates retrieval on multi-page cases: one page of thirteen is a hit.

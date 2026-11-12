@@ -201,6 +201,7 @@ def test_chunks_are_merged_back_without_their_repeated_sentence():
     merged = merge_chunks(["Couper le gaz. Ventiler le local.", "Ventiler le local. Baliser."])
     assert merged == "Couper le gaz. Ventiler le local. Baliser."
     assert merge_chunks(["Titre A", "Titre B"]) == "Titre A Titre B"  # no overlap: a space
+    assert merge_chunks(["Titre A", "A suivre."]) == "Titre A A suivre."  # not a sentence
 
 
 def test_excerpts_are_checked_against_the_indexed_text_of_their_page():

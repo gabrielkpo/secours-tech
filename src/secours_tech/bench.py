@@ -187,9 +187,18 @@ def merge_chunks(texts: Sequence[str]) -> str:
     merged = ""
     for text in texts:
         overlap = next(
-            (k for k in range(min(len(merged), len(text)), 0, -1) if merged.endswith(text[:k])), 0
+            (
+                k
+                for k in range(min(len(merged), len(text)), 0, -1)
+                if text[k - 1] in ".!?;:"  # whole sentences only, as the chunker repeats them
+                and (k == len(text) or text[k] == " ")
+                and merged.endswith(text[:k])
+                and (k == len(merged) or merged[-k - 1] == " ")
+            ),
+            0,
         )
-        merged = f"{merged} {text[overlap:]}" if merged and not overlap else merged + text[overlap:]
+        rest = text[overlap:].lstrip()
+        merged = f"{merged} {rest}".strip() if rest else merged
     return merged
 
 
@@ -523,7 +532,9 @@ def main(argv: list[str] | None = None) -> None:
         args.fingerprint.write_text(f"{new}  {tests} test cases\n", encoding="utf-8")
         history = args.fingerprint.with_name(HISTORY)
         if not history.exists():
-            history.write_text("# Frozen test split: changes before it was scored\n\n")
+            history.write_text(
+                "# Frozen test split: changes before it was scored\n\n", encoding="utf-8"
+            )
         with history.open("a", encoding="utf-8") as log:
             log.write(f"- {date.today().isoformat()}: {frozen[:12]} -> {new[:12]}, {tests} test"
                       f" cases. {args.reason}\n")  # fmt: skip
