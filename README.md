@@ -128,11 +128,13 @@ retrieval, then each retrieval variant.
 **The bench (J2, 11/11/2026).** 31 cases, all asked as a firefighter would ask them: 11 simple
 questions, 5 complex situations, 5 tasks per function, 5 out-of-doctrine questions, 3 traps and 2
 medical ones (medication only as the PSE references allow it: prescribed, or asked for by the
-regulating doctor). 283 excerpts back the expected answers; `bench check` finds every one word
-for word on its page. 9 cases (30 %, drawn in every category) form the **frozen test split**,
-scored once at the end; the other 22 tune the system. The cases quote the doctrine, so they stay
-out of Git; only the fingerprint of the test split is versioned (`eval/frozen-test.sha256`), and
-the bench refuses to run if a test case changed. First measure, full text only, on the 16 answered
+regulating doctor). 282 excerpts back the expected answers; `bench check` finds every one word
+for word on its PDF page and, for answered cases, in the indexed text of that page. 9 cases
+(30 %, drawn in every category) form the **frozen test split**, scored once at the end; the other
+22 tune the system. The cases quote the doctrine, so they stay out of Git; only the fingerprint of
+the test split is versioned (`eval/frozen-test.sha256`), the bench refuses to run if a test case
+changed, and the one correction made before any test score is logged in
+`eval/frozen-test-history.md`. First measure, full text only, on the 16 answered
 dev cases: right page in the first 5 pages for 62 % of the cases, in the first 20 for 81 %, MRR
 0.43. Embeddings and hybrid search (J3) are scored against this baseline.
 

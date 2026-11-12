@@ -23,12 +23,14 @@ import tomllib
 import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
 CASES = Path("data/eval/cases")
 FINGERPRINT = Path("eval/frozen-test.sha256")
 RUNS = Path("eval/runs")
+HISTORY = "frozen-test-history.md"  # next to the fingerprint
 RAW = Path("data/raw")
 CATEGORIES = ("simple", "complex", "function", "out_of_scope", "trap", "medical")
 SPLITS = ("dev", "test")
@@ -107,20 +109,35 @@ def load_cases(folder: Path = CASES) -> list[Case]:
 
 
 def normalize(text: str) -> str:
-    """Compare text, not typography: same quotes and spaces, lines joined, ligature spelled out."""
-    text = unicodedata.normalize("NFC", text)
-    for old, new in (("’", "'"), ("‘", "'"), (" ", " "), (" ", " "), ("œ", "oe")):
+    """Compare text, not typography: same quotes and spaces, list bullets dropped, lines joined,
+    ligature spelled out, an accent over a dotless i (as some PDFs store "î") composed on a
+    plain i."""
+    text = unicodedata.normalize("NFC", text.replace("ı", "i"))
+    spaces = (("\u00a0", " "), ("\u202f", " "), ("•", " "))  # no-break, thin no-break, bullet
+    for old, new in (("’", "'"), ("‘", "'"), ("œ", "oe"), *spaces):
         text = text.replace(old, new)
     text = re.sub(r"-\s*\n\s*", "-", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
 @lru_cache(maxsize=512)
-def _pdf_page(path: Path, page: int, layout: bool) -> str:
-    """Text of one page; empty when pdftotext cannot read it (a page past the end, say)."""
-    options = ["-layout"] if layout else []
+def _pdf_page(path: Path, page: int, mode: str) -> str:
+    """Text of one page in a reading order of pdftotext ("plain", "raw" or "layout"); empty
+    when pdftotext cannot read it (a page past the end, say)."""
+    options = [] if mode == "plain" else [f"-{mode}"]
     done = subprocess.run(
-        ["pdftotext", *options, "-f", str(page), "-l", str(page), str(path), "-"],
+        [
+            "pdftotext",
+            *options,
+            "-enc",
+            "UTF-8",
+            "-f",
+            str(page),
+            "-l",
+            str(page),
+            str(path.resolve()),
+            "-",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -129,11 +146,12 @@ def _pdf_page(path: Path, page: int, layout: bool) -> str:
 
 
 def _readings(excerpt: Excerpt, pdf: Path | None, ocr_text: Callable[[str, int], str | None]):
-    """The page's text, cheapest reading first: OCR text, then plain order, then layout order."""
+    """The page's text, cheapest reading first: OCR text, then plain, raw and layout orders (raw
+    order keeps whole the words whose accents are stored apart, as the loader reads them)."""
     yield normalize(ocr_text(excerpt.document, excerpt.page) or "")
     if pdf is not None:
-        for layout in (False, True):
-            yield normalize(_pdf_page(pdf, excerpt.page, layout))
+        for mode in ("plain", "raw", "layout"):
+            yield normalize(_pdf_page(pdf, excerpt.page, mode))
 
 
 def missing_excerpts(
@@ -148,14 +166,74 @@ def missing_excerpts(
     for case in cases:
         for excerpt in case.excerpts:
             pdf = pdfs.get(excerpt.document)
-            fragments = [normalize(part) for part in re.split(r"\[…\]|\[\.\.\.\]", excerpt.text)]
-            fragments = [part for part in fragments if part.strip(" .")]
+            fragments = _fragments(excerpt)
             if not fragments or not any(
                 all(part in text for part in fragments)
                 for text in _readings(excerpt, pdf, ocr_text)
             ):
                 missing.append((case.id, excerpt))
     return missing
+
+
+def _fragments(excerpt: Excerpt) -> list[str]:
+    """The excerpt's parts, cut at « […] », normalised."""
+    parts = [normalize(part) for part in re.split(r"\[…\]|\[\.\.\.\]", excerpt.text)]
+    return [part for part in parts if part.strip(" .")]
+
+
+def merge_chunks(texts: Sequence[str]) -> str:
+    """A page's chunks joined back in order, the sentence repeated at the start of a chunk (the
+    overlap of D7) kept once, so an excerpt that runs across two chunks is found."""
+    merged = ""
+    for text in texts:
+        overlap = next(
+            (
+                k
+                for k in range(min(len(merged), len(text)), 0, -1)
+                if text[k - 1] in ".!?;:"  # whole sentences only, as the chunker repeats them
+                and (k == len(text) or text[k] == " ")
+                and merged.endswith(text[:k])
+                and (k == len(merged) or merged[-k - 1] == " ")
+            ),
+            0,
+        )
+        rest = text[overlap:].lstrip()
+        merged = f"{merged} {rest}".strip() if rest else merged
+    return merged
+
+
+def indexed_page_text(conn) -> Callable[[str, int], str | None]:
+    """The indexed text of a page of a current official guide, None when no chunk holds it."""
+
+    def read(document: str, page: int) -> str | None:
+        rows = conn.execute(
+            "SELECT c.text FROM chunks c JOIN documents d ON d.id = c.document_id"
+            " WHERE d.filename = %s AND c.page = %s AND d.retired_at IS NULL"
+            " AND d.source = 'web' ORDER BY c.position",
+            (document, page),
+        ).fetchall()
+        return merge_chunks([text for (text,) in rows]) if rows else None
+
+    return read
+
+
+def unindexed_excerpts(
+    cases: Sequence[Case], page_text: Callable[[str, int], str | None]
+) -> list[tuple[str, Excerpt, str]]:
+    """Excerpts of answered cases that retrieval and the citation check cannot match: their page
+    gives no chunk ("page not indexed"), or the indexed text of the page does not hold them word
+    for word ("not verbatim"). Refusal cases may quote guides the index leaves out."""
+    found = []
+    for case in cases:
+        if case.refusal:
+            continue
+        for excerpt in case.excerpts:
+            text = page_text(excerpt.document, excerpt.page)
+            if text is None:
+                found.append((case.id, excerpt, "page not indexed"))
+            elif not all(part in normalize(text) for part in _fragments(excerpt)):
+                found.append((case.id, excerpt, "not verbatim"))
+    return found
 
 
 # --- the frozen test split --------------------------------------------------------------------
@@ -387,6 +465,11 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("check", help="every excerpt is found word for word on its page")
     sub.add_parser("split", help="draw the test split (refused once the test is frozen)")
     sub.add_parser("freeze", help="write the fingerprint of the test split")
+    refreeze = sub.add_parser(
+        "refreeze", help="freeze corrected test cases again, while the test split is unscored"
+    )
+    refreeze.add_argument("--reason", required=True, help="what changed and why, for the log")
+    refreeze.add_argument("--runs", type=Path, default=RUNS)
     run = sub.add_parser("run", help="retrieval scores (hit@k, recall@k, all@k, MRR) on a split")
     run.add_argument("--retriever", choices=("fulltext", "vector", "hybrid"), default="fulltext")
     run.add_argument("--model", choices=("mistral", "e5"), default="mistral")
@@ -435,6 +518,28 @@ def main(argv: list[str] | None = None) -> None:
         args.fingerprint.write_text(f"{fingerprint(cases)}  {tests} test cases\n", encoding="utf-8")
         print(f"frozen: {tests} test cases, fingerprint written to {args.fingerprint}")
         return
+    if args.command == "refreeze":
+        if not frozen:
+            raise SystemExit("nothing is frozen yet: run freeze")
+        scored = sorted(args.runs.glob("*-test-*.json")) if args.runs.exists() else []
+        if scored:
+            # once the test split has been scored, a corrected set would be tuned on its results
+            raise SystemExit(f"the test split was already scored ({scored[0].name}): no refreeze")
+        new = fingerprint(cases)
+        if new == frozen:
+            raise SystemExit("the test cases did not change: nothing to refreeze")
+        tests = sum(case.split == "test" for case in cases)
+        args.fingerprint.write_text(f"{new}  {tests} test cases\n", encoding="utf-8")
+        history = args.fingerprint.with_name(HISTORY)
+        if not history.exists():
+            history.write_text(
+                "# Frozen test split: changes before it was scored\n\n", encoding="utf-8"
+            )
+        with history.open("a", encoding="utf-8") as log:
+            log.write(f"- {date.today().isoformat()}: {frozen[:12]} -> {new[:12]}, {tests} test"
+                      f" cases. {args.reason}\n")  # fmt: skip
+        print(f"refrozen: {tests} test cases, change logged in {history}")
+        return
     if frozen and fingerprint(cases) != frozen:
         raise SystemExit("the test cases differ from the frozen fingerprint: they were edited")
 
@@ -449,7 +554,15 @@ def main(argv: list[str] | None = None) -> None:
                 )
             total = sum(len(case.excerpts) for case in cases)
             print(f"{total - len(missing)}/{total} excerpts found word for word on their page")
-            if missing:
+            unindexed = unindexed_excerpts(cases, indexed_page_text(conn))
+            for case_id, excerpt, reason in unindexed:
+                print(f"{reason.upper()} {case_id} {excerpt.document} p.{excerpt.page}")
+            answered = sum(len(case.excerpts) for case in cases if not case.refusal)
+            print(
+                f"{answered - len(unindexed)}/{answered} excerpts of answered cases found word for"
+                " word in the indexed text of their page"
+            )
+            if missing or unindexed:
                 raise SystemExit(1)
             return
         if args.split == "test" and not args.final:

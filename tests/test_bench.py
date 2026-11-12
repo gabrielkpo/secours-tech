@@ -12,9 +12,12 @@ from secours_tech.bench import (
     fulltext,
     load_case,
     load_cases,
+    merge_chunks,
     missing_excerpts,
+    normalize,
     page_ranks,
     summarize,
+    unindexed_excerpts,
     write_split,
 )
 from secours_tech.collect import Entry
@@ -192,3 +195,58 @@ def test_a_document_outside_the_manifest_is_never_retrieved(conn):
     pages = (Page(1, texts[0], "text_layer", 30, 0, 0, 1.0),)
     store_document(conn, SourceDocument("GDO-old.pdf", "b" * 64, texts, pages))  # local
     assert fulltext(conn)("couper le gaz") == []
+
+
+def test_chunks_are_merged_back_without_their_repeated_sentence():
+    merged = merge_chunks(["Couper le gaz. Ventiler le local.", "Ventiler le local. Baliser."])
+    assert merged == "Couper le gaz. Ventiler le local. Baliser."
+    assert merge_chunks(["Titre A", "Titre B"]) == "Titre A Titre B"  # no overlap: a space
+    assert merge_chunks(["Titre A", "A suivre."]) == "Titre A A suivre."  # not a sentence
+
+
+def test_excerpts_are_checked_against_the_indexed_text_of_their_page():
+    def case(case_id, refusal, *excerpts):
+        return Case(case_id, "simple", "dev", "?", refusal, excerpts, Path("x"))
+
+    pages = {("a.pdf", 1): "Couper le gaz. Ventiler le local. Baliser la zone."}
+    cases = [
+        case("Q01", False, Excerpt("a.pdf", 1, "Couper le gaz. […] Baliser la zone.")),
+        case("Q02", False, Excerpt("a.pdf", 1, "Couper l'eau.")),
+        case("Q03", False, Excerpt("a.pdf", 2, "Sommaire")),
+        case("Q04", True, Excerpt("b.pdf", 9, "Hors du corpus indexé.")),
+    ]
+    found = unindexed_excerpts(cases, lambda document, page: pages.get((document, page)))
+    assert [(case_id, reason) for case_id, _, reason in found] == [
+        ("Q02", "not verbatim"),
+        ("Q03", "page not indexed"),
+    ]
+
+
+def test_an_accent_over_a_dotless_i_compares_as_the_plain_letter():
+    assert normalize("maı\u0302trise") == normalize("maîtrise")
+    assert normalize("victime ; • vidange") == normalize("victime ; vidange")  # list bullet
+
+
+def test_a_corrected_test_split_is_refrozen_only_while_unscored(tmp_path):
+    from secours_tech.bench import main
+
+    cases, stamp, runs = tmp_path / "cases", tmp_path / "frozen.sha256", tmp_path / "runs"
+    cases.mkdir()
+
+    def test_case(text):
+        write_case(cases, excerpts=[("doc.pdf", 1, text)])
+        write_split(load_case(cases / "Q01.toml"), "test")
+
+    argv = ["--cases", str(cases), "--fingerprint", str(stamp)]
+    test_case("Couper le gaz.")
+    main([*argv, "freeze"])
+    first = stamp.read_text()
+    test_case("Couper le gaz du local.")
+    main([*argv, "refreeze", "--runs", str(runs), "--reason", "Excerpt re-copied."])
+    assert stamp.read_text() != first
+    assert "Excerpt re-copied." in (tmp_path / "frozen-test-history.md").read_text()
+    runs.mkdir()
+    (runs / "20261112T000000Z-test-fulltext-none-none.json").write_text("{}")
+    test_case("Couper le gaz.")
+    with pytest.raises(SystemExit, match="already scored"):
+        main([*argv, "refreeze", "--runs", str(runs), "--reason", "again"])
