@@ -18,7 +18,7 @@ Issues = "https://github.com/gabrielkpo/secours-tech/issues"
 [project.optional-dependencies]
 # local reference embedding and reranking; not installed in the main CI job, exercised by the
 # Local extra workflow (tests/test_local_extra.py)
-local = ["torch==2.14.1", "transformers==5.21.0"]
+local = ["torch==2.15.0", "transformers==5.22.0"]
 
 [dependency-groups]
 dev = [
