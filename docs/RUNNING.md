@@ -35,6 +35,24 @@ file whose fingerprint changed is refused, with both editions described, until
 Every command is run with `uv run` from the repository root. A run's record names the commit it
 used and warns when the working tree had uncommitted changes.
 
+## With Docker
+
+The image (`Dockerfile`) holds the package, its locked dependencies, poppler and tesseract, and
+runs as an unprivileged user; `compose.yaml` adds a local Postgres with pgvector, listening on
+the loopback only. Set `POSTGRES_PASSWORD` and `APP_DB_PASSWORD` in `.env`, then:
+
+```bash
+docker compose up -d db migrate                          # database, role and schema
+docker compose run --rm pipeline secours_tech.load data/raw
+docker compose run --rm pipeline secours_tech.bench run --retriever vector --model e5
+```
+
+The pipeline connects as `secours_tech`, owner of its database but not a superuser; the
+extensions are created once by `deploy/compose/initdb.sql`. `data/`, `eval/` and `corpus/` are
+mounted: `data/raw` must hold the PDF files themselves (a symbolic link to a folder outside the
+repository is not visible in the container), and on Linux the container's user (uid 10001) must
+be able to write to them.
+
 ## Tests
 
 ```bash

@@ -1,0 +1,10 @@
+# Deny by default: only what the image needs is sent to the build. data/ (doctrine PDFs, cases),
+# .env and .git never are.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src/
+!corpus/
+**/__pycache__

@@ -25,3 +25,25 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: "chore(docker)"
+    groups:
+      images:
+        patterns: ["*"]
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    commit-message:
+      prefix: "chore(docker)"
+    groups:
+      compose:
+        patterns: ["*"]

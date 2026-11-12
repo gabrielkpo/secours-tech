@@ -1,0 +1,56 @@
+# Local stack: Postgres with pgvector, the migrations, and the pipeline commands in the same
+# image as production. Passwords come from .env (see .env.example); Postgres listens on the
+# loopback only.
+#
+#   docker compose up -d db migrate                     # database and schema
+#   docker compose run --rm pipeline secours_tech.load data/raw
+#
+# data/ (the PDFs downloaded by hand, the OCR model, the cases) is mounted, never baked in.
+name: secours-tech
+
+services:
+  db:
+    # pinned by digest (pg17 tag on 2026-11-12), the image of the CI database
+    image: pgvector/pgvector:pg17@sha256:7d0a41464797aeb9862dfdc0bbf1526b82cfd324cdd8036df19e3545f4a9ccb8
+    environment:
+      POSTGRES_DB: secours_tech
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/compose/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:ro
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d secours_tech"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build: .
+    image: secours-tech:local
+    environment:
+      DATABASE_URL: postgresql://secours_tech:${APP_DB_PASSWORD}@db:5432/secours_tech
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  pipeline:
+    image: secours-tech:local
+    profiles: [pipeline]  # started only by `docker compose run`
+    entrypoint: ["python", "-m"]
+    environment:
+      DATABASE_URL: postgresql://secours_tech:${APP_DB_PASSWORD}@db:5432/secours_tech
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./eval:/app/eval  # bench run writes its records to eval/runs
+      - ./corpus:/app/corpus  # register and ocr_bench update the manifest and the OCR record
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
