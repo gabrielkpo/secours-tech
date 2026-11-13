@@ -248,10 +248,35 @@ def _call(
 
 
 def quoted(quote: str, text: str) -> bool:
-    """Whether `quote` appears word for word in `text`, as whole words: "zone de 5" is not in
-    "zone de 50 mètres". Both are compared without typography (`normalize`)."""
-    pattern = r"(?<!\w)" + re.escape(normalize(quote)) + r"(?!\w)"
-    return re.search(pattern, normalize(text)) is not None
+    """Whether `quote` appears word for word in `text`, as whole words and whole numbers: "zone
+    de 5" is not in "zone de 50 mètres", nor "de 1" in "de 1,5 bar" or in "de 1 000 m". Both
+    are compared without typography (`normalize`)."""
+    before = r"(?<!\w)(?<!\d[.,])"
+    after = r"(?!\w)(?![.,]\d)(?! \d{3}(?!\d))"
+    return re.search(before + re.escape(normalize(quote)) + after, normalize(text)) is not None
+
+
+def _is_draft(draft) -> bool:
+    """Whether a parsed reply has the shape of ANSWER_SCHEMA."""
+
+    def citation(c) -> bool:
+        return isinstance(c, dict) and all(isinstance(c.get(k), str) for k in ("passage", "quote"))
+
+    def sentence(s) -> bool:
+        return (
+            isinstance(s, dict)
+            and isinstance(s.get("text"), str)
+            and isinstance(s.get("citations"), list)
+            and all(citation(c) for c in s["citations"])
+        )
+
+    return (
+        isinstance(draft, dict)
+        and draft.get("status") in ("answer", "refusal", "clarification")
+        and isinstance(draft.get("clarification"), str)
+        and isinstance(draft.get("sentences"), list)
+        and all(sentence(s) for s in draft["sentences"])
+    )
 
 
 def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], list[str]]:
@@ -302,7 +327,12 @@ def verify(
         VERIFICATION_TOKENS,
         usage,
     )
-    verdicts = {v["sentence"]: v["supported"] for v in result["verdicts"]}
+    rows = result.get("verdicts") if isinstance(result, dict) else None
+    if not isinstance(rows, list) or not all(
+        isinstance(v, dict) and isinstance(v.get("sentence"), int) for v in rows
+    ):
+        raise ModelOutputError("verification: off the schema")
+    verdicts = {v["sentence"]: v.get("supported") for v in rows}
     problems = []
     for n in range(1, len(sentences) + 1):
         if n not in verdicts:
@@ -341,12 +371,12 @@ def answer(
             GENERATION_TOKENS,
             usage,
         )
+        if not _is_draft(draft):
+            raise ModelOutputError("answer: off the schema")
         status, clarification = draft["status"], str(draft["clarification"]).strip()
         if status == "refusal":
             return Answer("refused", message=REFUSED, pages=closest, usage=usage)
         sentences, problems = check(draft, passages)
-        if status not in ("answer", "clarification"):
-            problems.append(f"unknown status {status!r}")
         if status == "answer" and not sentences:
             problems.append("an answer without a sentence")
         if status == "clarification" and (not clarification or _MARKUP.search(clarification)):
@@ -357,9 +387,6 @@ def answer(
         return Answer(
             "blocked", message=BLOCKED, pages=closest, problems=(str(error),), usage=usage
         )
-    except (KeyError, TypeError, AttributeError) as error:  # JSON, but not the schema's shape
-        problem = f"answer off the schema ({type(error).__name__})"
-        return Answer("blocked", message=BLOCKED, pages=closest, problems=(problem,), usage=usage)
     if problems:
         return Answer(
             "blocked", message=BLOCKED, pages=closest, problems=tuple(problems), usage=usage

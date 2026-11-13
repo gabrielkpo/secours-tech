@@ -14,6 +14,7 @@ from secours_tech.answer import (
     answer,
     ask,
     numbers,
+    quoted,
     render,
     retrieve,
 )
@@ -155,6 +156,22 @@ def test_a_quote_cut_inside_a_word_or_a_number_is_not_word_for_word():
     assert "number 5 in no quote" in " ".join(result.problems)
     cut = _sentence("Le gaz est coupé à 5 m.", ("P1", "ventilation, à 5"))
     assert "word for word" in answer("Q ?", PASSAGES, FakeChat(_draft(cut))).problems[0]
+
+
+@pytest.mark.parametrize(
+    ("quote", "text", "found"),
+    [
+        ("une pression de 1", "une pression de 1,5 bar", False),
+        ("une pression de 1", "une pression de 1.5 bar", False),
+        ("une zone de 1", "une zone de 1\u00a0000 m", False),
+        ("une zone de 1 000 m", "une zone de 1\u00a0000 m", True),
+        ("5 m du feu", "à 5 m du feu, puis", True),
+        ("5 m du feu", "à 15 m du feu", False),
+        ("la zone de 50 m.", "Établir la zone de 50 m. Puis", True),
+    ],
+)
+def test_quotes_match_whole_words_and_whole_numbers(quote, text, found):
+    assert quoted(quote, text) is found
 
 
 @pytest.mark.parametrize(
