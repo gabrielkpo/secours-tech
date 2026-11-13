@@ -147,6 +147,34 @@ def test_each_citation_check_blocks_on_its_own(sentence, problem):
     assert len(chat.payloads) == 1  # a draft blocked by code is never sent to verification
 
 
+def test_a_quote_cut_inside_a_word_or_a_number_is_not_word_for_word():
+    sentence = _sentence("Le gaz est coupé à 5 m.", ("P1", "à 5"), ("P1", "Couper le gaz au robin"))
+    result = answer("Que faire ?", PASSAGES, FakeChat(_draft(sentence)))
+    assert result.status == "blocked"
+    assert sum("word for word" in p for p in result.problems) == 1  # "à 5" is too short
+    assert "number 5 in no quote" in " ".join(result.problems)
+    cut = _sentence("Le gaz est coupé à 5 m.", ("P1", "ventilation, à 5"))
+    assert "word for word" in answer("Q ?", PASSAGES, FakeChat(_draft(cut))).problems[0]
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"status": "answered", "sentences": [GOOD], "clarification": ""},  # status off the enum
+        {"status": "answer", "sentences": [{"text": "x"}], "clarification": ""},  # no citations
+        {"status": "answer", "sentences": "x", "clarification": ""},
+        ["not", "an", "object"],
+    ],
+)
+def test_json_off_the_schema_is_blocked_not_raised(reply):
+    assert answer("Que faire ?", PASSAGES, FakeChat(reply)).status == "blocked"
+
+
+def test_a_verification_reply_off_the_schema_is_blocked_not_raised():
+    chat = FakeChat(_draft(GOOD), [{"supported": True}])
+    assert answer("Que faire ?", PASSAGES, chat).status == "blocked"
+
+
 def test_typography_does_not_block_a_true_quote():
     passage = _passage(1, "Établir un périmètre de sécurité ; l’accès est interdit.")
     quote = "Établir un périmètre de sécurité; l'accès est interdit."  # no space before ;

@@ -200,19 +200,11 @@ def retrieve(conn, embedder, question: str, limit: int = PASSAGES) -> list[Passa
     ).fetchall()
     return [
         Passage(
-            f"P{n}",
-            row[0],
-            row[1],
-            row[2],
-            row[3],
-            row[4],
-            row[5],
-            row[6],
-            row[7],
-            row[8] == "ocr",
-            float(row[9]),
+            f"P{n}", chunk, doc, title, url, version, page, section, text, how == "ocr", float(sim)
         )
-        for n, row in enumerate(rows, start=1)
+        for n, (chunk, doc, title, url, version, page, section, text, how, sim) in enumerate(
+            rows, start=1
+        )
     ]
 
 
@@ -255,6 +247,13 @@ def _call(
         raise ModelOutputError(f"{name}: unreadable answer ({type(error).__name__})") from None
 
 
+def quoted(quote: str, text: str) -> bool:
+    """Whether `quote` appears word for word in `text`, as whole words: "zone de 5" is not in
+    "zone de 50 mètres". Both are compared without typography (`normalize`)."""
+    pattern = r"(?<!\w)" + re.escape(normalize(quote)) + r"(?!\w)"
+    return re.search(pattern, normalize(text)) is not None
+
+
 def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], list[str]]:
     """The draft's sentences with their checked citations, and every problem found (D13)."""
     by_id = {p.id: p for p in passages}
@@ -272,7 +271,7 @@ def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], lis
                 problems.append(f"sentence {n}: unknown passage {cited['passage']!r}")
             elif len(normalize(quote).split()) < MIN_QUOTE_WORDS:
                 problems.append(f"sentence {n}: quote shorter than {MIN_QUOTE_WORDS} words")
-            elif normalize(quote) not in normalize(passage.text):
+            elif not quoted(quote, passage.text):
                 problems.append(f"sentence {n}: quote not found word for word in {passage.id}")
             else:
                 citations.append(Citation(passage, quote))
@@ -346,6 +345,8 @@ def answer(
         if status == "refusal":
             return Answer("refused", message=REFUSED, pages=closest, usage=usage)
         sentences, problems = check(draft, passages)
+        if status not in ("answer", "clarification"):
+            problems.append(f"unknown status {status!r}")
         if status == "answer" and not sentences:
             problems.append("an answer without a sentence")
         if status == "clarification" and (not clarification or _MARKUP.search(clarification)):
@@ -356,6 +357,9 @@ def answer(
         return Answer(
             "blocked", message=BLOCKED, pages=closest, problems=(str(error),), usage=usage
         )
+    except (KeyError, TypeError, AttributeError) as error:  # JSON, but not the schema's shape
+        problem = f"answer off the schema ({type(error).__name__})"
+        return Answer("blocked", message=BLOCKED, pages=closest, problems=(problem,), usage=usage)
     if problems:
         return Answer(
             "blocked", message=BLOCKED, pages=closest, problems=tuple(problems), usage=usage

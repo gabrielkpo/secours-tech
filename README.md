@@ -9,8 +9,9 @@ and refuse when the doctrine does not cover the question.
 
 > **Status: milestone 3 of 12, expect breaking changes.** The corpus, its OCR, the evaluation
 > set and retrieval are built and measured; answer generation and its citation checks are
-> built but not scored yet; the API and the interface are not built. Personal project, not validated by the French civil protection: it does not
-> replace training or command. See [Roadmap](#roadmap).
+> built but not scored yet; the API and the interface are not built. Personal project, not
+> validated by the French civil protection: it does not replace training or command. See
+> [Roadmap](#roadmap).
 
 ## Why
 
