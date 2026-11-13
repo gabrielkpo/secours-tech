@@ -31,6 +31,7 @@ file whose fingerprint changed is refused, with both editions described, until
 | Embeddings | `python -m secours_tech.embed --model mistral --dry-run`, then without it | Mistral embeddings, only the chunk inputs without a vector | `--model e5` runs locally (local extra). |
 | Bench check | `python -m secours_tech.bench check` | no | Needs the cases in `data/eval/cases/` (not published). Run it in the image, whose poppler reads the PDF pages as the reference index does. |
 | Bench run | `python -m secours_tech.bench run --retriever vector --model e5` | only with `--model mistral` (one short call per question) | Writes a record to `eval/runs/`; `bench report eval/runs/*.json` prints the table. |
+| Answer | `python -m secours_tech.answer "<question>"` | Mistral embeddings and chat: about 3,000 tokens over three calls | Needs the `mistral-embed-2312` vectors. `--json` adds why a draft was blocked and the tokens used; `--min-similarity` refuses below a similarity. |
 
 Every command is run with `uv run` from the repository root. A run's record names the commit it
 used and warns when the working tree had uncommitted changes.

@@ -20,13 +20,13 @@ import re
 import subprocess
 import time
 import tomllib
-import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
 
+from secours_tech.text import normalize
 from secours_tech.tools import run_tool
 
 CASES = Path("data/eval/cases")
@@ -108,18 +108,6 @@ def load_cases(folder: Path = CASES) -> list[Case]:
 
 
 # --- excerpts are quoted word for word -----------------------------------------------------
-
-
-def normalize(text: str) -> str:
-    """Compare text, not typography: same quotes and spaces, list bullets dropped, lines joined,
-    ligature spelled out, an accent over a dotless i (as some PDFs store "î") composed on a
-    plain i."""
-    text = unicodedata.normalize("NFC", text.replace("ı", "i"))
-    spaces = (("\u00a0", " "), ("\u202f", " "), ("•", " "))  # no-break, thin no-break, bullet
-    for old, new in (("’", "'"), ("‘", "'"), ("œ", "oe"), *spaces):
-        text = text.replace(old, new)
-    text = re.sub(r"-\s*\n\s*", "-", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 @lru_cache(maxsize=512)

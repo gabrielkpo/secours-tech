@@ -8,8 +8,8 @@ the national doctrine** (GDO, GTO, SSUAP, PSE), **cite the guide and page** behi
 and refuse when the doctrine does not cover the question.
 
 > **Status: milestone 3 of 12, expect breaking changes.** The corpus, its OCR, the evaluation
-> set and retrieval are built and measured; answer generation, the API and the interface are
-> not built yet. Personal project, not validated by the French civil protection: it does not
+> set and retrieval are built and measured; answer generation and its citation checks are
+> built but not scored yet; the API and the interface are not built. Personal project, not validated by the French civil protection: it does not
 > replace training or command. See [Roadmap](#roadmap).
 
 ## Why
@@ -27,8 +27,6 @@ and committed 170+ MB of PDFs. v3 keeps documents out of Git and the key server-
 
 ## How it works
 
-Solid boxes exist on `main`; dashed boxes are designed, not built.
-
 ```mermaid
 flowchart LR
     A["Official PDFs<br/>(corpus/sources.toml)"] --> B["load<br/>page text, routes,<br/>sections, chunks"]
@@ -37,13 +35,12 @@ flowchart LR
     O --> D
     Q["Question"] --> R["Retrieval<br/>full text, vectors, RRF"]
     D --> R
-    R --> M["Mistral generation<br/>JSON: answer, citations"]
-    M --> V{"Every excerpt found<br/>verbatim in the chunks?"}
-    V -->|yes| OK["Answer + guide + page"]
-    V -->|no| NO["Refusal with reason"]
-
-    classDef planned stroke-dasharray: 5 5
-    class M,V,OK,NO planned
+    R --> M["Mistral generation<br/>JSON: sentences, quotes"]
+    M --> V{"Code: every quote verbatim<br/>in its passage, every<br/>number quoted?"}
+    V -->|yes| W{"Second call: do the<br/>quotes support<br/>each sentence?"}
+    V -->|no| NO["Refusal or block,<br/>closest pages"]
+    W -->|yes| OK["Answer + guide + page"]
+    W -->|no| NO
 ```
 
 **Choices and their trade-offs**
@@ -54,7 +51,8 @@ flowchart LR
   headers are removed by position only, and no cut or note mark alters a number.
 - **OCR gated per guide**: a guide's OCR text is indexed only if a hand-checked sample reads
   every number right.
-- **Citation check by string equality** rather than trusting the model.
+- **Citation check by string equality** rather than trusting the model, then a second call
+  that can only block: a quote can be true and the sentence still say more than it.
 - **Documents listed, not committed**: `corpus/sources.toml` pins each official URL and
   SHA-256, and the loader refuses any other PDF.
 
@@ -63,18 +61,22 @@ Decisions are numbered in [docs/decisions.md](docs/decisions.md); the pipeline i
 
 ## Example
 
-A synthetic example of the target output (the generation step does not exist yet):
+The shape of an answer, on made-up text (`python -m secours_tech.answer "<question>"` prints
+it as plain text):
 
-```json
-{
-  "question": "Quelle distance de sécurité autour de l'installation ?",
-  "answer": "25 mètres autour de l'installation, d'après le guide.",
-  "citations": [
-    {"document": "Guide de doctrine (exemple)", "page": 12, "excerpt": "25 mètres"}
-  ],
-  "refused": false
-}
+```text
+- Un périmètre de 25 mètres est établi autour de l'installation. [1]
+
+Sources
+[1] Guide de doctrine (exemple) v1, page 12
+    https://<official URL of the guide>#page=12
+    « un périmètre de 25 mètres est établi autour de l'installation »
+
+Information générale tirée de la doctrine : en intervention, le COS décide.
 ```
+
+A refusal or a blocked answer shows no sentence, only the closest pages; a quote read by OCR is
+marked so.
 
 ## Results
 
@@ -122,7 +124,7 @@ local Postgres included).
 | J1 Corpus: text per page, OCR, Postgres loader | done; 11 of 14 OCR guides indexed |
 | J2 Evaluation set: 31 cases checked by a firefighter | done; 9 frozen for the final test |
 | J3 Retrieval: embeddings, full text, fusion, reranking | measured; chunk-size trials to come |
-| J4 Generation: structured answers, citation check, refusals | next |
+| J4 Generation: structured answers, citation check, refusals | in progress: generation and checks built, answer scoring next |
 | J5 App: FastAPI with rate limit, query log, minimal UI | planned |
 | J6 Collection: sources manifest, monthly watch | done; downloads stay manual |
 | J7 Production: Docker, Helm, Kubernetes, continuous deployment | in progress: pipeline image, local compose, Helm chart for the database tested on kind |
@@ -150,10 +152,11 @@ local Postgres included).
   evaluation case (they quote the doctrine, whose reproduction rights are reserved: see
   [License](#license)).
 - **Sent to a third party today**: the guides' image pages (Mistral OCR), the chunk texts and
-  the evaluation questions (Mistral embeddings), under Mistral's API terms; no personal data.
-  Model weights come from Hugging Face at pinned revisions.
-- **Planned**: user questions will go to the Mistral API to be answered; the query log will keep
-  no IP address or account.
+  the evaluation questions (Mistral embeddings); for an answer, the question (embeddings), then
+  the question with the 8 retrieved passages, then the drafted sentences with their quotes
+  (Mistral chat, two calls). All under Mistral's API terms. Model weights come from Hugging Face
+  at pinned revisions.
+- **Planned**: the API will log questions without an IP address or account.
 
 ## Limitations
 
@@ -166,7 +169,11 @@ local Postgres included).
   (2.8 % of characters) stay out of the index.
 - **A small, unpublished bench.** 16 development and 9 frozen test cases: scores can be traced
   to their records, not rerun by others.
-- **No answers yet.** Generation and the citation check are designed but not built.
+- **Answers are not scored yet.** Generation and both checks work end to end, but the answer
+  bench (right, partial or wrong answers, wrong refusals, serious faults) is the next step. On
+  first trials the verification call blocks many answers whose sentences say more than their
+  quotes. The similarity threshold below which a question is refused without a call is not
+  calibrated yet, and numbers written in words are not checked against the quotes.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
   for an individual case.
 
