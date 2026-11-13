@@ -58,6 +58,9 @@ Règles :
 2. Chaque phrase de ta réponse cite au moins un passage : son "id" et une citation copiée mot
    pour mot dans le "text" de ce passage, d'un seul tenant, d'au moins trois mots. Les
    citations d'une phrase disent tout ce qu'elle affirme, situation et conditions comprises.
+   Recopie caractère pour caractère, sans rien retirer : ni parenthèse, ni incise, ni chiffre
+   d'appel de note collé à un mot (« noter1 » reste « noter1 »). Pour faire court, cite un
+   morceau plus court d'un seul tenant, jamais un extrait raccourci.
 3. Chaque chiffre, unité ou seuil d'une phrase figure dans une de ses citations.
 4. Une consigne ou une valeur ne vaut que pour la situation que décrit son passage (voir sa
    "section") : ne l'applique jamais à une autre situation que celle de la question.

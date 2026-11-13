@@ -65,7 +65,7 @@ def test_outcome_counts_cited_pages_against_the_expected_ones(tmp_path):
 def test_the_sheet_shows_expected_and_shown_answers_with_lines_to_grade(tmp_path):
     case = load_case(write_case(tmp_path))
     result = answer("Que faire ?", PASSAGES, FakeChat(_draft(GOOD)))
-    text = sheet([case], {case.id: result}, [outcome(case, result, 0.8, 1.0)])
+    text = sheet([case], {case.id: result})
     assert "**Expected**: Cinq mètres." in text
     assert "**Serious fault if**: une autre distance" in text
     assert "Le gaz est coupé avant de ventiler" in text

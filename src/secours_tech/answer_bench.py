@@ -142,10 +142,9 @@ def _case_text(case: Case) -> dict:
     return tomllib.loads(case.path.read_text(encoding="utf-8"))
 
 
-def sheet(cases: Sequence[Case], results: dict[str, Answer], outcomes: Sequence[Outcome]) -> str:
+def sheet(cases: Sequence[Case], results: dict[str, Answer]) -> str:
     """The grading sheet: per case, what was expected and what the system showed, then a line
     to fill in."""
-    by_id = {o.case: o for o in outcomes}
     lines = [
         "# Answer grading sheet",
         "",
@@ -154,7 +153,7 @@ def sheet(cases: Sequence[Case], results: dict[str, Answer], outcomes: Sequence[
         "",
     ]
     for case in cases:
-        data, result, seen = _case_text(case), results[case.id], by_id[case.id]
+        data, result = _case_text(case), results[case.id]
         lines += [
             f"## {case.id} ({case.category}{', refusal expected' if case.refusal else ''})",
             "",
@@ -164,9 +163,10 @@ def sheet(cases: Sequence[Case], results: dict[str, Answer], outcomes: Sequence[
             "",
             f"**Serious fault if**: {data['serious_fault_if']}",
             "",
-            f"**Status**: {result.status}"
-            + (f" ({', '.join(seen.problems)})" if seen.problems else ""),
+            f"**Status**: {result.status}",
             "",
+            *[f"- blocked: {problem}" for problem in result.problems],
+            *([""] if result.problems else []),
             "```text",
             render(result),
             "```",
@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> None:
     path = write(args.records, data)
     args.sheets.mkdir(parents=True, exist_ok=True)
     grading = args.sheets / path.with_suffix(".md").name
-    grading.write_text(sheet(chosen, results, outcomes), encoding="utf-8")
+    grading.write_text(sheet(chosen, results), encoding="utf-8")
     print(f"record written to {path}\ngrading sheet written to {grading}")
     if data["code"]["dirty"]:
         print("warning: uncommitted changes; this record does not describe its commit")
