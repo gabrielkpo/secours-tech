@@ -11,7 +11,9 @@ flowchart LR
     O --> I
     Q["Question"] --> R["retrieval: full text, vectors, RRF"]
     I --> R
-    R --> G["generation + citation check (planned)"]
+    R --> G["generation: JSON sentences and quotes"]
+    G --> C["checks: quotes verbatim, numbers quoted, no markup"]
+    C --> V["verification call: quotes support each sentence"]
 ```
 
 Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
@@ -57,6 +59,20 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   torch's `weights_only` unpickler (tensors only). Per-token vectors are computed on the fly
   rather than stored: storing them for every chunk would take gigabytes and pgvector cannot
   compute the max-sim score.
+- **An answer is checked twice, and each check can only block** (`answer.py`). The 8 chunks
+  nearest to the question (`mistral-embed-2312`, D21) go to `mistral-medium-2604`, pinned, at
+  temperature 0 with a fixed seed. Its instructions are the system message; the question and
+  the passages go in a separate JSON data message, so neither can rewrite them. It answers in a
+  strict JSON schema: a status (answer, refusal, clarification) and sentences, each citing
+  passages by id with a quote. Code then checks that every sentence cites, that every quote has
+  three words or more and appears word for word in its passage (text compared without
+  typography: quotes, dashes, French spaces, invisible characters), that every number of a
+  sentence appears in one of its quotes, and that no sentence holds a link, image or tag (D13).
+  A second call reads each sentence with its quotes only and says whether they support all of
+  it, who does the action included (D17). One failed check blocks the whole answer: nothing is
+  shown but the closest pages. Quotes from OCR pages are flagged, since the check compares them
+  with the OCR text, not with the printed page. Output is bounded (`max_tokens`), and a cut or
+  unreadable answer is blocked too.
 - **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
   evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.
