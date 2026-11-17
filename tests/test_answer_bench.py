@@ -26,7 +26,10 @@ from test_embed import FakeEmbedder, _guide
 
 
 def _outcome(case="Q01", refusal=False, status="answered", cited=1, expected=1, problems=()):
-    return Outcome(case, "simple", refusal, status, 0.8, cited, expected, problems, 100, 10, 2.0)
+    drafts = 2 if problems else 1
+    return Outcome(
+        case, "simple", refusal, status, 0.8, cited, expected, problems, drafts, 100, 10, 2.0
+    )
 
 
 def test_problem_kinds_keep_the_check_not_its_details():
@@ -50,6 +53,7 @@ def test_scores_separate_cases_the_doctrine_answers_from_those_it_does_not():
     assert result["cites_expected_page_rate"] == 0.5  # Q01 yes, Q02 no
     assert result["answered_unanswerable_rate"] == 0.5  # Q05
     assert result["blocked_by"] == {"not_supported": 1}
+    assert (result["corrected"], result["shown_after_correction"]) == (1, 0)
     assert result["status"] == {"answered": 2, "blocked": 1, "clarification": 1, "refused": 1}
 
 

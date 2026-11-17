@@ -13,6 +13,9 @@ Every step can refuse; none can let an unchecked sentence through (docs/ARCHITEC
    sentence appears in one of its quotes; no link, image or markup.
 4. A second call reads each sentence with its quotes only and says whether they support it; it
    can only block too (D17).
+5. A blocked draft is sent back once with the list of its problems, and the corrected draft
+   goes through every check again. No check is relaxed: a correction can only pass the same
+   checks, be blocked again, or refuse.
 
 A blocked answer shows no sentence, only the closest pages to read. A quote from an OCR page is
 flagged: the check compares it with the OCR text, not with the printed page.
@@ -33,6 +36,7 @@ PASSAGES = 8  # chunks given to the model
 MAX_QUESTION = 500  # characters; a question is a sentence or two, never a document
 MIN_QUOTE_WORDS = 3  # a shorter quote ("le feu") proves nothing
 GENERATION_TOKENS = 1500
+CORRECTIONS = 1  # times a blocked draft is sent back with its problems, checked again
 VERIFICATION_TOKENS = 400
 
 REFUSED = (
@@ -80,6 +84,19 @@ Statuts :
 - "clarification" : la question de précision dans "clarification" ; des phrases citées
   peuvent donner les variantes.
 - "refusal" : aucune phrase ; "clarification" vide.
+"""
+
+CORRECT = """\
+Ta réponse a été bloquée par le contrôle des citations, pour ces raisons :
+{problems}
+
+Corrige-la, avec les mêmes règles et le même format JSON :
+- une citation introuvable : recopie-la caractère pour caractère depuis le "text" du passage
+  cité, ou cite un morceau plus court d'un seul tenant ;
+- un chiffre absent des citations : ajoute la citation qui le contient, ou retire le chiffre ;
+- une phrase que ses citations n'appuient pas : réduis-la à ce que disent ses citations, ou
+  retire-la ;
+- si les passages ne permettent pas de répondre, refuse (statut "refusal").
 """
 
 VERIFY = """\
@@ -177,6 +194,7 @@ class Answer:
     pages: tuple[Passage, ...] = ()  # the closest passages, shown with a refusal or a block
     problems: tuple[str, ...] = ()  # why a draft was blocked; for logs and the bench
     usage: dict[str, dict[str, int]] = field(default_factory=dict)  # tokens per model
+    drafts: int = 0  # drafts written: 1, or more when a blocked draft was corrected
 
 
 def numbers(text: str) -> set[str]:
@@ -219,8 +237,10 @@ def _call(
     schema: tuple[str, dict],
     max_tokens: int,
     usage: dict[str, dict[str, int]],
+    turns: Sequence[dict] = (),
 ) -> dict:
-    """One deterministic call answering in a JSON schema; its tokens are added to `usage`."""
+    """One deterministic call answering in a JSON schema; its tokens are added to `usage`.
+    `turns` follow the data message: an earlier reply and what to correct in it."""
     name, body = schema
     response = chat(
         {
@@ -231,6 +251,7 @@ def _call(
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
+                *turns,
             ],
             "response_format": {
                 "type": "json_schema",
@@ -364,39 +385,59 @@ def answer(
             for p in passages
         ],
     }
-    try:
-        draft = _call(
-            chat,
-            GENERATION_MODEL,
-            SYSTEM,
-            data,
-            ("answer", ANSWER_SCHEMA),
-            GENERATION_TOKENS,
-            usage,
-        )
-        if not _is_draft(draft):
-            raise ModelOutputError("answer: off the schema")
-        status, clarification = draft["status"], str(draft["clarification"]).strip()
-        if status == "refusal":
-            return Answer("refused", message=REFUSED, pages=closest, usage=usage)
-        sentences, problems = check(draft, passages)
-        if status == "answer" and not sentences:
-            problems.append("an answer without a sentence")
-        if status == "clarification" and (not clarification or _MARKUP.search(clarification)):
-            problems.append("a clarification without a plain question")
-        if sentences and not problems and verification:
-            problems += verify(sentences, chat, usage)
-    except ModelOutputError as error:
-        return Answer(
-            "blocked", message=BLOCKED, pages=closest, problems=(str(error),), usage=usage
-        )
+    turns: list[dict] = []
+    for drafts in range(1, CORRECTIONS + 2):
+        try:
+            draft = _call(
+                chat,
+                GENERATION_MODEL,
+                SYSTEM,
+                data,
+                ("answer", ANSWER_SCHEMA),
+                GENERATION_TOKENS,
+                usage,
+                turns,
+            )
+            if not _is_draft(draft):
+                raise ModelOutputError("answer: off the schema")
+            status, clarification = draft["status"], draft["clarification"].strip()
+            if status == "refusal":
+                return Answer("refused", message=REFUSED, pages=closest, usage=usage, drafts=drafts)
+            sentences, problems = check(draft, passages)
+            if status == "answer" and not sentences:
+                problems.append("an answer without a sentence")
+            if status == "clarification" and (not clarification or _MARKUP.search(clarification)):
+                problems.append("a clarification without a plain question")
+            if sentences and not problems and verification:
+                problems += verify(sentences, chat, usage)
+        except ModelOutputError as error:  # not corrected: the reply is not even readable
+            return Answer(
+                "blocked",
+                message=BLOCKED,
+                pages=closest,
+                problems=(str(error),),
+                usage=usage,
+                drafts=drafts,
+            )
+        if not problems:
+            break
+        # every check runs again on the corrected draft: a correction can only be blocked again
+        turns = [
+            {"role": "assistant", "content": json.dumps(draft, ensure_ascii=False)},
+            {"role": "user", "content": CORRECT.format(problems="\n".join(problems))},
+        ]
     if problems:
         return Answer(
-            "blocked", message=BLOCKED, pages=closest, problems=tuple(problems), usage=usage
+            "blocked",
+            message=BLOCKED,
+            pages=closest,
+            problems=tuple(problems),
+            usage=usage,
+            drafts=drafts,
         )
     if status == "clarification":
-        return Answer("clarification", tuple(sentences), clarification, usage=usage)
-    return Answer("answered", tuple(sentences), usage=usage)
+        return Answer("clarification", tuple(sentences), clarification, usage=usage, drafts=drafts)
+    return Answer("answered", tuple(sentences), usage=usage, drafts=drafts)
 
 
 def ask(question: str, conn, embedder, chat: Chat, **options) -> Answer:

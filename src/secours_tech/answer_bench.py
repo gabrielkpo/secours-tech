@@ -73,6 +73,7 @@ class Outcome:
     cited_pages: int  # distinct pages cited
     cited_expected: int  # of which expected pages
     problems: tuple[str, ...]  # kinds, see PROBLEM_KINDS
+    drafts: int  # 2 when the first draft was blocked and sent back for correction
     prompt_tokens: int
     completion_tokens: int
     seconds: float
@@ -97,6 +98,7 @@ def outcome(case: Case, result: Answer, top: float | None, seconds: float) -> Ou
         len(cited),
         len(cited & case.expected_pages),
         tuple(sorted({problem_kind(p) for p in result.problems})),
+        result.drafts,
         tokens["prompt_tokens"],
         tokens["completion_tokens"],
         round(seconds, 2),
@@ -129,6 +131,9 @@ def scores(outcomes: Sequence[Outcome]) -> dict:
             sum(o.responded for o in unanswerable), len(unanswerable)
         ),
         "blocked_by": dict(sorted(Counter(k for o in outcomes for k in o.problems).items())),
+        # drafts sent back for correction, and those of them shown after the second check
+        "corrected": sum(o.drafts > 1 for o in outcomes),
+        "shown_after_correction": sum(o.drafts > 1 and o.responded for o in outcomes),
         "tokens_per_question": {
             "prompt": round(sum(o.prompt_tokens for o in outcomes) / max(len(outcomes), 1)),
             "completion": round(sum(o.completion_tokens for o in outcomes) / max(len(outcomes), 1)),
