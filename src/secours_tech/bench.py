@@ -503,7 +503,10 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "refreeze":
         if not frozen:
             raise SystemExit("nothing is frozen yet: run freeze")
+        from secours_tech.answer_bench import scored_test
+
         scored = sorted(args.runs.glob("*-test-*.json")) if args.runs.exists() else []
+        scored += scored_test(args.runs.parent / "answers")  # eval/answers next to eval/runs
         if scored:
             # once the test split has been scored, a corrected set would be tuned on its results
             raise SystemExit(f"the test split was already scored ({scored[0].name}): no refreeze")

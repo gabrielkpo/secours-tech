@@ -53,15 +53,19 @@ def _reply(content: dict | str, finish: str = "stop") -> dict:
 
 
 class FakeChat:
-    """Answers the generation call with `draft` and the verification call with `verdicts`."""
+    """Answers the generation call with `draft` (then `corrected`, when given, for a
+    correction) and the verification call with `verdicts`."""
 
-    def __init__(self, draft, verdicts=None):
-        self.draft, self.verdicts, self.payloads = draft, verdicts, []
+    def __init__(self, draft, verdicts=None, corrected=None):
+        self.draft, self.verdicts, self.corrected, self.payloads = draft, verdicts, corrected, []
 
     def __call__(self, payload: dict) -> dict:
         self.payloads.append(payload)
         if payload["response_format"]["json_schema"]["name"] == "answer":
-            return self.draft if "choices" in self.draft else _reply(self.draft)
+            draft = self.draft
+            if self.corrected is not None and len(payload["messages"]) > 2:
+                draft = self.corrected
+            return draft if "choices" in draft else _reply(draft)
         data = json.loads(payload["messages"][1]["content"])
         if self.verdicts is None:  # every sentence supported
             return _reply(
@@ -145,7 +149,9 @@ def test_each_citation_check_blocks_on_its_own(sentence, problem):
     assert result.status == "blocked"
     assert result.sentences == ()  # nothing unchecked is shown
     assert any(problem in p for p in result.problems), result.problems
-    assert len(chat.payloads) == 1  # a draft blocked by code is never sent to verification
+    # sent back once with its problems, blocked again by code, never sent to verification
+    assert [p["response_format"]["json_schema"]["name"] for p in chat.payloads] == ["answer"] * 2
+    assert result.drafts == 2
 
 
 def test_a_quote_cut_inside_a_word_or_a_number_is_not_word_for_word():
@@ -283,3 +289,38 @@ def test_retrieve_returns_the_nearest_passages_of_current_guides(conn):
     assert not passages[0].ocr
     conn.execute("UPDATE documents SET retired_at = now()")
     assert retrieve(conn, fake, "gaz") == []
+
+
+def _names(chat: FakeChat) -> list[str]:
+    return [p["response_format"]["json_schema"]["name"] for p in chat.payloads]
+
+
+def test_a_blocked_draft_is_corrected_once_and_checked_again():
+    bad = _sentence("Le gaz est coupé.", ("P1", "Couper le gaz au compteur"))
+    chat = FakeChat(_draft(bad), corrected=_draft(GOOD))
+    result = answer("Que faire ?", PASSAGES, chat)
+    assert (result.status, result.drafts) == ("answered", 2)
+    assert _names(chat) == ["answer", "answer", "verification"]
+    system, data, previous, correction = chat.payloads[1]["messages"]
+    assert system == chat.payloads[0]["messages"][0]  # the instructions do not change
+    assert data == chat.payloads[0]["messages"][1]
+    assert previous["role"] == "assistant" and "au compteur" in previous["content"]
+    assert correction["role"] == "user"
+    assert "sentence 1: quote not found word for word in P1" in correction["content"]
+
+
+def test_a_sentence_the_verification_rejects_is_corrected_and_verified_again():
+    chat = FakeChat(_draft(GOOD), [{"sentence": 1, "supported": False}])
+    result = answer("Que faire ?", PASSAGES, chat)
+    assert (result.status, result.drafts) == ("blocked", 2)
+    assert _names(chat) == ["answer", "verification", "answer", "verification"]
+    assert "not supported" in chat.payloads[2]["messages"][3]["content"]
+
+
+def test_a_correction_may_refuse_and_an_answer_needs_no_correction():
+    bad = _sentence("Le gaz est coupé.")
+    refused = answer("Q ?", PASSAGES, FakeChat(_draft(bad), corrected=_draft(status="refusal")))
+    assert (refused.status, refused.drafts) == ("refused", 2)
+    chat = FakeChat(_draft(GOOD))
+    assert answer("Q ?", PASSAGES, chat).drafts == 1
+    assert _names(chat) == ["answer", "verification"]

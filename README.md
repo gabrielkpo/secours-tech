@@ -99,6 +99,13 @@ and limits (reranked rows: previous index): [docs/EVALUATION.md](docs/EVALUATION
 One case is 6 points. Vectors beat full text by far; reranking raises recall but costs tens of
 seconds per question on a laptop CPU, far above the 8 s target.
 
+Answers on the 22 development cases (16 the doctrine answers, 6 expecting a refusal), from the
+latest record in [`eval/answers/`](eval/answers/): 8 of the 16 answerable cases get an answer,
+each citing a page the case expects; the others are blocked by the checks (5) or refused (3).
+One case expecting a refusal was answered from another indexed guide and is to be reviewed. Grades (right, partial, wrong, serious faults)
+come from the firefighter who reviewed the cases and are not in yet: see
+[docs/EVALUATION.md](docs/EVALUATION.md#answers-j4-development-split).
+
 ## Run it
 
 Prerequisites: Python 3.11+, [uv](https://docs.astral.sh/uv/), Postgres 17 with pgvector and
@@ -125,7 +132,7 @@ local Postgres included).
 | J1 Corpus: text per page, OCR, Postgres loader | done; 11 of 14 OCR guides indexed |
 | J2 Evaluation set: 31 cases checked by a firefighter | done; 9 frozen for the final test |
 | J3 Retrieval: embeddings, full text, fusion, reranking | measured; chunk-size trials to come |
-| J4 Generation: structured answers, citation check, refusals | in progress: generation and checks built, answer scoring next |
+| J4 Generation: structured answers, citation check, refusals | in progress: answers scored by code on the dev split; grades by hand next |
 | J5 App: FastAPI with rate limit, query log, minimal UI | planned |
 | J6 Collection: sources manifest, monthly watch | done; downloads stay manual |
 | J7 Production: Docker, Helm, Kubernetes, continuous deployment | in progress: pipeline image, local compose, Helm chart for the database tested on kind |
@@ -170,11 +177,11 @@ local Postgres included).
   (2.8 % of characters) stay out of the index.
 - **A small, unpublished bench.** 16 development and 9 frozen test cases: scores can be traced
   to their records, not rerun by others.
-- **Answers are not scored yet.** Generation and both checks work end to end, but the answer
-  bench (right, partial or wrong answers, wrong refusals, serious faults) is the next step. On
-  first trials the verification call blocks many answers whose sentences say more than their
-  quotes. The similarity threshold below which a question is refused without a call is not
-  calibrated yet, and numbers written in words are not checked against the quotes.
+- **Answers are not graded yet.** Code scores statuses and cited pages; whether an answer is
+  right, and any serious fault, comes from hand grades not yet in. Half the cases the doctrine
+  answers get no answer, mostly complex situations and tasks by function. The similarity
+  threshold below which a question is refused without a call is not calibrated, and numbers
+  written in words are not checked against the quotes.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
   for an individual case.
 

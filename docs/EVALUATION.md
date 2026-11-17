@@ -81,11 +81,54 @@ Scores per category (simple, complex, function, trap, medical) are in each recor
   CPU, far above the 8 s target: it needs fewer chunks, a GPU or a server before it can serve
   users (D11, D20).
 
+## Answers (J4), development split
+
+`python -m secours_tech.answer_bench --split dev` asks the 22 development cases end to end:
+retrieval, generation, the citation checks and the verification call. Its record
+([`eval/answers/`](../eval/answers/)) holds what code can score, never doctrine text:
+- the status of each answer (answered, clarification, refused, blocked);
+- the share of the 16 cases the doctrine answers that got no answer;
+- the share of answers citing a page the case expects;
+- the share of the 6 cases expecting a refusal that got an answer;
+- why drafts were blocked (the kind of check);
+- how many drafts were sent back for correction;
+- the similarity of the nearest passage, tokens and seconds.
+
+Whether an answer is right, partial or wrong, and whether it holds a serious fault, is graded by
+the firefighter who reviewed the cases, from a sheet written out of Git (`data/eval/answers/`).
+Those grades are not in yet.
+
+| Instructions | Answered (of 22) | Refused | Blocked | Answerable, no answer (of 16) | Citing an expected page | Refusal expected, answered | Corrected (then shown) | Tokens in / out per question | s / question | Record |
+|---|---|---|---|---|---|---|---|---|---|---|
+| first version | 4 | 8 | 10 | 0.75 | 1.00 | 0.00 | - | 2,453 / 293 | 44.4 | `20261113T185444Z-dev-answers.json` |
+| quotes copied character for character | 5 | 8 | 9 | 0.69 | 1.00 | 0.00 | - | 2,586 / 332 | 4.6 | `20261113T185756Z-dev-answers.json` |
+| + one correction of a blocked draft | 9 | 8 | 5 | 0.50 | 1.00 | 0.17 | 9 (4) | 4,035 / 536 | 4.9 | `20261117T095635Z-dev-answers.json` |
+
+All three use `mistral-medium-2604` for generation and verification and the 8 nearest chunks by
+`mistral-embed-2312`. Seconds of the first run include long waits on API rate limits.
+
+- **Most blocks were quotes that were almost exact.** The model dropped a parenthesis, a clause
+  or a note mark glued to a word. Asking for exact copies, then sending a blocked draft back
+  once with the list of its problems, took the cases the doctrine answers that get an answer
+  from 4 to 8 of 16. No check was relaxed: a corrected draft goes through all of them again.
+- **The verification call blocks on substance.** On first trials it stopped a distance applied
+  to another situation than the question's, and tasks given to a function no quote named.
+- **The one case expecting a refusal that got an answer is a case to review.** It expected a
+  refusal because the guide its excerpts come from is not indexed (its OCR failed the gate).
+  The system answered it from another indexed guide, with quotes found word for word: the
+  doctrine in the index may now answer it.
+- **Complex situations and tasks by function are still left without an answer.** None of the
+  7 such cases gets one: 5 are blocked and 2 refused. Their answers are longer, so one sentence
+  that says more than its quotes is enough to block them. Steps fixed in advance (D16)
+  are the next lever.
+- Every answer to a case the doctrine answers cites at least one page the case expects.
+
 ## Limits
 
 - 16 development cases: one case is 6 points. The tables rank options; they do not prove small
   gaps. The set grows to 60 to 100 cases before the final evaluation (J10).
 - The cases are not published: others can check that the test split was not edited (its
   fingerprint) and how each score was produced (its record), not rerun it.
-- Scores measure retrieval only: whether the pages an answer needs are found. Answers, citations
-  and refusals are scored once generation exists (J4).
+- Answer scores count statuses and cited pages; whether an answer is right comes from the
+  firefighter's grades, not yet in. The refusal threshold on similarity is not calibrated: the
+  nearest passage scores 0.79 to 0.90 on every case, refusals expected or not.
