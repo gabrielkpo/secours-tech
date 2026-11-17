@@ -98,7 +98,7 @@ Whether an answer is right, partial or wrong, and whether it holds a serious fau
 the firefighter who reviewed the cases, from a sheet written out of Git (`data/eval/answers/`).
 Those grades are not in yet.
 
-| Instructions | Answered | Refused | Blocked | Answerable, no answer | Citing an expected page | Refusal expected, answered | Corrected (then shown) | Tokens in / out per question | s / question | Record |
+| Instructions | Answered (of 22) | Refused | Blocked | Answerable, no answer (of 16) | Citing an expected page | Refusal expected, answered | Corrected (then shown) | Tokens in / out per question | s / question | Record |
 |---|---|---|---|---|---|---|---|---|---|---|
 | first version | 4 | 8 | 10 | 0.75 | 1.00 | 0.00 | - | 2,453 / 293 | 44.4 | `20261113T185444Z-dev-answers.json` |
 | quotes copied character for character | 5 | 8 | 9 | 0.69 | 1.00 | 0.00 | - | 2,586 / 332 | 4.6 | `20261113T185756Z-dev-answers.json` |
@@ -109,8 +109,8 @@ All three use `mistral-medium-2604` for generation and verification and the 8 ne
 
 - **Most blocks were quotes that were almost exact.** The model dropped a parenthesis, a clause
   or a note mark glued to a word. Asking for exact copies, then sending a blocked draft back
-  once with the list of its problems, took the answered cases from 4 to 9 of 16. No check was
-  relaxed: a corrected draft goes through all of them again.
+  once with the list of its problems, took the cases the doctrine answers that get an answer
+  from 4 to 8 of 16. No check was relaxed: a corrected draft goes through all of them again.
 - **The verification call blocks on substance.** On first trials it stopped a distance applied
   to another situation than the question's, and tasks given to a function no quote named.
 - **The one case expecting a refusal that got an answer is a case to review.** It expected a
@@ -121,7 +121,7 @@ All three use `mistral-medium-2604` for generation and verification and the 8 ne
   7 such cases gets one: 5 are blocked and 2 refused. Their answers are longer, so one sentence
   that says more than its quotes is enough to block them. Steps fixed in advance (D16)
   are the next lever.
-- Every answer shown cites at least one page the case expects.
+- Every answer to a case the doctrine answers cites at least one page the case expects.
 
 ## Limits
 

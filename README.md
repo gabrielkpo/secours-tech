@@ -100,9 +100,9 @@ One case is 6 points. Vectors beat full text by far; reranking raises recall but
 seconds per question on a laptop CPU, far above the 8 s target.
 
 Answers on the 22 development cases (16 the doctrine answers, 6 expecting a refusal), from the
-latest record in [`eval/answers/`](eval/answers/): 9 answered, 8 refused, 5 blocked by the
-checks. Every answer shown cites an expected page. One case expecting a refusal was answered
-from another indexed guide and is to be reviewed. Grades (right, partial, wrong, serious faults)
+latest record in [`eval/answers/`](eval/answers/): 8 of the 16 answerable cases get an answer,
+each citing a page the case expects; the others are blocked by the checks (5) or refused (3).
+One case expecting a refusal was answered from another indexed guide and is to be reviewed. Grades (right, partial, wrong, serious faults)
 come from the firefighter who reviewed the cases and are not in yet: see
 [docs/EVALUATION.md](docs/EVALUATION.md#answers-j4-development-split).
 
