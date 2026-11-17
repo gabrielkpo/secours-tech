@@ -1,0 +1,365 @@
+{
+  "date": "2026-11-13T18:54:44+00:00",
+  "code": {
+    "commit": "baefd82ae0d54527841da50696f708a9c56ad77e",
+    "dirty": false
+  },
+  "setup": {
+    "split": "dev",
+    "embedding": "mistral-embed-2312",
+    "passages": 8,
+    "generation": "mistral-medium-2604",
+    "verification": "mistral-medium-2604",
+    "seed": 11112026,
+    "min_similarity": null
+  },
+  "index": {
+    "sha256": "a9d32539d3647b9a00f3c7fe7256f0903794179c8be36b4dac056089527f554c",
+    "chunks": {
+      "ocr": 2322,
+      "text_layer": 5082
+    },
+    "ocr_engines": [
+      "mistral-ocr-4-1 text-only, raised digits marked"
+    ]
+  },
+  "cases": {
+    "split": "dev",
+    "n": 22,
+    "sha256": "2046baffd53045ebc0a7db408b330f870fc6e58400586b79f231f115f0934394"
+  },
+  "scores": {
+    "n": 22,
+    "answerable": 16,
+    "unanswerable": 6,
+    "status": {
+      "answered": 4,
+      "blocked": 10,
+      "refused": 8
+    },
+    "no_answer_rate": 0.75,
+    "cites_expected_page_rate": 1.0,
+    "answered_unanswerable_rate": 0.0,
+    "blocked_by": {
+      "not_supported": 2,
+      "number_not_quoted": 2,
+      "quote_not_found": 8
+    },
+    "tokens_per_question": {
+      "prompt": 2453,
+      "completion": 293
+    },
+    "seconds_per_question": 44.41
+  },
+  "outcomes": [
+    {
+      "case": "Q02",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "answered",
+      "top_similarity": 0.8965,
+      "cited_pages": 2,
+      "cited_expected": 2,
+      "problems": [],
+      "prompt_tokens": 2805,
+      "completion_tokens": 308,
+      "seconds": 3.91
+    },
+    {
+      "case": "Q03",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "answered",
+      "top_similarity": 0.8603,
+      "cited_pages": 1,
+      "cited_expected": 1,
+      "problems": [],
+      "prompt_tokens": 2633,
+      "completion_tokens": 266,
+      "seconds": 3.16
+    },
+    {
+      "case": "Q05",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "answered",
+      "top_similarity": 0.8704,
+      "cited_pages": 2,
+      "cited_expected": 1,
+      "problems": [],
+      "prompt_tokens": 2890,
+      "completion_tokens": 140,
+      "seconds": 2.68
+    },
+    {
+      "case": "Q06",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.879,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2455,
+      "completion_tokens": 737,
+      "seconds": 7.08
+    },
+    {
+      "case": "Q07",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8608,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2300,
+      "completion_tokens": 379,
+      "seconds": 3.52
+    },
+    {
+      "case": "Q08",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "answered",
+      "top_similarity": 0.802,
+      "cited_pages": 1,
+      "cited_expected": 1,
+      "problems": [],
+      "prompt_tokens": 3166,
+      "completion_tokens": 525,
+      "seconds": 15.03
+    },
+    {
+      "case": "Q09",
+      "category": "simple",
+      "refusal_expected": true,
+      "status": "blocked",
+      "top_similarity": 0.8171,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "not_supported"
+      ],
+      "prompt_tokens": 2805,
+      "completion_tokens": 312,
+      "seconds": 3.87
+    },
+    {
+      "case": "Q12",
+      "category": "complex",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8825,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "number_not_quoted",
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2242,
+      "completion_tokens": 414,
+      "seconds": 3.18
+    },
+    {
+      "case": "Q13",
+      "category": "complex",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8701,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2440,
+      "completion_tokens": 1091,
+      "seconds": 17.55
+    },
+    {
+      "case": "Q15",
+      "category": "complex",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8499,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2456,
+      "completion_tokens": 307,
+      "seconds": 5.41
+    },
+    {
+      "case": "Q16",
+      "category": "function",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8503,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "number_not_quoted",
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2195,
+      "completion_tokens": 1027,
+      "seconds": 7.15
+    },
+    {
+      "case": "Q17",
+      "category": "function",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8595,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2476,
+      "completion_tokens": 309,
+      "seconds": 7.59
+    },
+    {
+      "case": "Q19",
+      "category": "function",
+      "refusal_expected": false,
+      "status": "refused",
+      "top_similarity": 0.854,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2361,
+      "completion_tokens": 19,
+      "seconds": 251.79
+    },
+    {
+      "case": "Q20",
+      "category": "function",
+      "refusal_expected": false,
+      "status": "refused",
+      "top_similarity": 0.838,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2075,
+      "completion_tokens": 19,
+      "seconds": 473.46
+    },
+    {
+      "case": "Q21",
+      "category": "simple",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8539,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "not_supported"
+      ],
+      "prompt_tokens": 2656,
+      "completion_tokens": 378,
+      "seconds": 155.25
+    },
+    {
+      "case": "Q21b",
+      "category": "out_of_scope",
+      "refusal_expected": true,
+      "status": "refused",
+      "top_similarity": 0.8273,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2476,
+      "completion_tokens": 19,
+      "seconds": 2.17
+    },
+    {
+      "case": "Q22",
+      "category": "out_of_scope",
+      "refusal_expected": true,
+      "status": "refused",
+      "top_similarity": 0.802,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2096,
+      "completion_tokens": 19,
+      "seconds": 3.85
+    },
+    {
+      "case": "Q23",
+      "category": "out_of_scope",
+      "refusal_expected": true,
+      "status": "refused",
+      "top_similarity": 0.8116,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2181,
+      "completion_tokens": 19,
+      "seconds": 2.67
+    },
+    {
+      "case": "Q24",
+      "category": "out_of_scope",
+      "refusal_expected": true,
+      "status": "refused",
+      "top_similarity": 0.7876,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2346,
+      "completion_tokens": 19,
+      "seconds": 1.34
+    },
+    {
+      "case": "Q26",
+      "category": "trap",
+      "refusal_expected": false,
+      "status": "blocked",
+      "top_similarity": 0.8918,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [
+        "quote_not_found"
+      ],
+      "prompt_tokens": 2171,
+      "completion_tokens": 104,
+      "seconds": 1.74
+    },
+    {
+      "case": "Q28",
+      "category": "trap",
+      "refusal_expected": true,
+      "status": "refused",
+      "top_similarity": 0.8206,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2103,
+      "completion_tokens": 19,
+      "seconds": 1.97
+    },
+    {
+      "case": "Q30",
+      "category": "medical",
+      "refusal_expected": false,
+      "status": "refused",
+      "top_similarity": 0.8625,
+      "cited_pages": 0,
+      "cited_expected": 0,
+      "problems": [],
+      "prompt_tokens": 2629,
+      "completion_tokens": 19,
+      "seconds": 2.58
+    }
+  ],
+  "grades": null
+}
