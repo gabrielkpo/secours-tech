@@ -170,8 +170,9 @@ local Postgres included).
 - **Sent to a third party today**: the guides' image pages (Mistral OCR), the chunk texts and
   the evaluation questions (Mistral embeddings); for an answer, the question (embeddings), then
   the question with the 8 retrieved passages, then the drafted sentences with their quotes
-  (Mistral chat, two calls). All under Mistral's API terms. Model weights come from Hugging Face
-  at pinned revisions.
+  (Mistral chat, two calls). All on Mistral's free API plan, whose terms let Mistral use the
+  data sent to train its models: the guides are public, and the page tells users so before they
+  ask. Model weights come from Hugging Face at pinned revisions.
 - **Kept by the API**: each question in the `queries` table, with its status, the pages cited
   and the tokens used, without an IP address or account, deleted after 90 days. A question may
   still hold personal data typed by a user: the page asks not to, since it goes to Mistral and
