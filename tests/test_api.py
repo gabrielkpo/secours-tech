@@ -189,6 +189,7 @@ def test_the_page_its_script_and_health_are_served(indexed):
     client = _client(indexed)
     page = client.get("/")
     assert page.status_code == 200 and "/static/app.js" in page.text
+    assert "aucune donnée personnelle" in page.text and "entraîner" in page.text
     assert "default-src 'none'" in page.headers["Content-Security-Policy"]
     script = client.get("/static/app.js")
     assert script.status_code == 200 and "innerHTML" not in script.text
