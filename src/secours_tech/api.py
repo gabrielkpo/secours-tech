@@ -12,8 +12,11 @@ Guards (docs/architecture.md), from the cheapest:
 - a request body above 2 KB, or without a length, is refused before it is read; a question has
   1 to 500 characters;
 - each client (its IP address as uvicorn sees it) may ask 5 questions a minute and 50 a day;
-- once the day's questions have used `DAILY_TOKENS` Mistral tokens (1,000,000 by default, a few
-  euros at most), every question is refused until midnight UTC, and a warning is logged;
+  behind a proxy, uvicorn must trust it (`--forwarded-allow-ips`), or every user shares the
+  proxy's address and one window;
+- once the day's questions have used `DAILY_TOKENS` Mistral chat tokens (1,000,000 by default,
+  a few euros at most), new questions are refused until midnight UTC and a warning is logged;
+  the questions already running finish, so the cap can be passed by a few questions;
 - the service refuses to start without the Mistral key, the database or the vectors of every
   current chunk: there is no degraded mode.
 
@@ -36,16 +39,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from secours_tech.answer import (
-    COS,
     GENERATION_MODEL,
     MAX_QUESTION,
     Answer,
     Chat,
-    Passage,
     answer,
+    as_json,
+    problem_kind,
     retrieve,
 )
-from secours_tech.answer_bench import problem_kind
 from secours_tech.env import setting
 
 log = logging.getLogger(__name__)
@@ -99,47 +101,6 @@ class Limiter:
             return 0.0
 
 
-def _page(passage: Passage) -> dict:
-    return {
-        "title": passage.title,
-        "version": passage.version,
-        "page": passage.page,
-        "link": passage.link,
-    }
-
-
-def as_json(result: Answer) -> dict:
-    """The answer as the page shows it: sentences with numbered sources, the sources with their
-    quotes, the closest pages of a refusal or a block, and the notice."""
-    sources: list[Passage] = []
-    sentences = []
-    for sentence in result.sentences:
-        refs: list[int] = []
-        for citation in sentence.citations:
-            if citation.passage not in sources:
-                sources.append(citation.passage)
-            if (n := sources.index(citation.passage) + 1) not in refs:
-                refs.append(n)
-        sentences.append({"text": sentence.text, "sources": refs})
-    quotes = [(c.passage, c.quote) for s in result.sentences for c in s.citations]
-    return {
-        "status": result.status,
-        "message": result.message,
-        "sentences": sentences,
-        "sources": [
-            {
-                "n": n,
-                **_page(passage),
-                "ocr": passage.ocr,
-                "quotes": [quote for cited, quote in quotes if cited == passage],
-            }
-            for n, passage in enumerate(sources, start=1)
-        ],
-        "pages": [_page(p) for p in result.pages],
-        "notice": COS,
-    }
-
-
 def tokens_today(conn) -> int:
     row = conn.execute(
         "SELECT coalesce(sum(prompt_tokens + completion_tokens), 0) FROM queries"
@@ -154,11 +115,10 @@ def log_query(
     result: Answer | None,
     top: float | None,
     seconds: float,
+    tokens: Counter[str],
 ) -> None:
-    """One row of `queries`, and the rows past the retention period deleted."""
-    tokens = Counter[str]()
-    for usage in (result.usage if result else {}).values():
-        tokens.update(usage)
+    """One row of `queries` (`result` None: the question failed), and the rows past the
+    retention period deleted. `tokens` are those of every chat call made, failed answer or not."""
     with conn.transaction():
         conn.execute(
             "INSERT INTO queries (question, status, problems, pages, top_similarity,"
@@ -267,17 +227,31 @@ def create_app(
                 log.warning("daily token cap of %d reached: questions refused", daily_tokens)
                 raise HTTPException(503, "Le plafond de questions du jour est atteint.")
             top: float | None = None
+            spent = Counter[str]()
+
+            def counted(payload: dict) -> dict:
+                """The chat call, its tokens counted even if a later call fails."""
+                reply = generate(payload)
+                usage = reply.get("usage") or {}
+                spent.update(
+                    {k: int(usage.get(k, 0)) for k in ("prompt_tokens", "completion_tokens")}
+                )
+                return reply
+
             try:
                 passages = retrieve(conn, embed, question)
                 top = passages[0].similarity if passages else None
-                result = answer(question, passages, generate)
-            except MistralError as error:
-                log.warning("ask: %s", error)
-                log_query(conn, question, None, top, time.perf_counter() - started)
-                raise HTTPException(
-                    502, "Le service de rédaction ne répond pas : réessayez plus tard."
-                ) from None
-            log_query(conn, question, result, top, time.perf_counter() - started)
+                result = answer(question, passages, counted)
+            except Exception as error:
+                log_query(conn, question, None, top, time.perf_counter() - started, spent)
+                if isinstance(error, MistralError):
+                    log.warning("ask: %s", error)
+                    raise HTTPException(
+                        502, "Le service de rédaction ne répond pas : réessayez plus tard."
+                    ) from None
+                log.exception("ask: the answer failed")
+                raise HTTPException(500, "La question n'a pas pu être traitée.") from None
+            log_query(conn, question, result, top, time.perf_counter() - started, spent)
         return as_json(result)
 
     @app.get("/")

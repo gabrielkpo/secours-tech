@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
+from conftest import TEST_URL
 from secours_tech import api as api_module
 from secours_tech.answer import answer
 from secours_tech.api import HEADERS, Limiter, as_json, create_app
@@ -160,6 +161,30 @@ def test_a_mistral_failure_is_a_502_without_details_and_is_logged(indexed):
     assert status == "error" and similarity is not None
 
 
+def test_tokens_of_calls_before_a_failure_count_against_the_cap(indexed):
+    generation = FakeChat(DRAFT)
+
+    def verification_down(payload):
+        if payload["response_format"]["json_schema"]["name"] == "answer":
+            return generation(payload)
+        raise MistralError("chat/completions: HTTP 503")
+
+    response = _client(indexed, verification_down).post("/api/ask", json={"question": "gaz ?"})
+    assert response.status_code == 502
+    row = indexed.execute("SELECT status, prompt_tokens, completion_tokens FROM queries").fetchone()
+    assert row == ("error", 100, 20)
+
+
+def test_any_other_failure_is_a_plain_500_and_is_logged(indexed):
+    def odd(payload):
+        raise RuntimeError("1 texts sent, 0 embeddings received")
+
+    response = _client(indexed, odd).post("/api/ask", json={"question": "gaz ?"})
+    assert response.status_code == 500
+    assert "embeddings" not in response.text
+    assert indexed.execute("SELECT status FROM queries").fetchone() == ("error",)
+
+
 def test_the_page_its_script_and_health_are_served(indexed):
     client = _client(indexed)
     page = client.get("/")
@@ -181,6 +206,6 @@ def test_the_service_refuses_to_start_without_its_key(monkeypatch, tmp_path):
 def test_the_service_refuses_to_start_with_chunks_left_unembedded(conn, monkeypatch):
     _guide(conn)
     monkeypatch.setenv("MISTRAL_API_KEY", "test-key")
-    monkeypatch.setenv("DATABASE_URL", conn.info.dsn)
+    monkeypatch.setenv("DATABASE_URL", TEST_URL)
     with pytest.raises(SystemExit, match="no mistral-embed"):
         api_module._production()
