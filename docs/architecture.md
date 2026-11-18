@@ -14,13 +14,28 @@ flowchart LR
     R --> G["generation: JSON sentences and quotes"]
     G --> C["checks: quotes verbatim, numbers quoted, no markup"]
     C --> V["verification call: quotes support each sentence"]
+    W["page + API: limits, daily token cap"] --> Q
+    V --> J[("queries log, 90 days")]
 ```
 
 Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
 
 ## Decisions
-- **API key server-side only.** The browser talks to our API, never to Mistral. Requests are
-  rate-limited per IP.
+- **API key server-side only.** The browser talks to our API, never to Mistral. The web API
+  (`api.py`) guards each question before any call, cheapest first: a body above 2 KB or
+  without a length is refused before it is read, a question has 1 to 500 characters, each
+  client IP may ask 5 questions a minute and 50 a day (behind a proxy, uvicorn must trust it
+  with `--forwarded-allow-ips`, or every user shares the proxy's address), and once the day's
+  questions have used `DAILY_TOKENS` Mistral chat tokens (1,000,000 by default) new questions
+  are refused until midnight UTC; those already running finish, so the cap is approximate. The service refuses to start without its key, its database or a vector for every current
+  chunk: there is no degraded mode. The page renders answers as text only (`textContent`,
+  links only to `https://`), under a Content Security Policy that allows the site's own script
+  and nothing else. It has no login: in production it sits behind the cluster's identity proxy
+  (D25).
+- **Query log without identity.** `queries` keeps each question, its status, the kinds of
+  check that blocked it, the pages cited, the similarity of the nearest passage, tokens and
+  seconds: no IP address, no account. Rows older than 90 days are deleted each time a question
+  is logged.
 - **Chunks keep (document, page).** Citations are only possible if provenance survives ingestion.
 - **Citation check by equality.** Every quoted passage in an answer must appear verbatim in the
   retrieved chunks, otherwise the answer is blocked.

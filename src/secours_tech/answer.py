@@ -197,6 +197,29 @@ class Answer:
     drafts: int = 0  # drafts written: 1, or more when a blocked draft was corrected
 
 
+# the kind of check that blocked a draft, from its problem message; details (numbers, ids) are
+# left out of the bench record and the query log, since they can come from the doctrine
+PROBLEM_KINDS = (
+    ("no citation", "no_citation"),
+    ("unknown passage", "unknown_passage"),
+    ("quote shorter", "short_quote"),
+    ("word for word", "quote_not_found"),
+    ("in no quote", "number_not_quoted"),
+    ("link or markup", "markup"),
+    ("not supported", "not_supported"),
+    ("no verdict", "no_verdict"),
+    ("without a sentence", "empty_answer"),
+    ("clarification without", "bad_clarification"),
+    ("off the schema", "off_schema"),
+    ("finish_reason", "cut"),
+    ("unreadable", "unreadable"),
+)
+
+
+def problem_kind(problem: str) -> str:
+    return next((kind for text, kind in PROBLEM_KINDS if text in problem), "other")
+
+
 def numbers(text: str) -> set[str]:
     """The numbers of a text, a decimal comma read as a point ("1,5" and "1.5" are the same)."""
     return {match.replace(",", ".") for match in _NUMBER.findall(normalize(text))}
@@ -448,29 +471,67 @@ def ask(question: str, conn, embedder, chat: Chat, **options) -> Answer:
     return answer(question, retrieve(conn, embedder, question), chat, **options)
 
 
-def render(result: Answer) -> str:
-    """The answer as plain text: sentences with numbered sources, then the sources."""
+def _page(passage: Passage) -> dict:
+    return {
+        "title": passage.title,
+        "version": passage.version,
+        "page": passage.page,
+        "link": passage.link,
+    }
+
+
+def as_json(result: Answer) -> dict:
+    """The answer as the page shows it: sentences with numbered sources, the sources with their
+    quotes, the closest pages of a refusal or a block, and the notice."""
     sources: list[Passage] = []
-    lines = [result.message] if result.message else []
+    sentences = []
     for sentence in result.sentences:
-        refs = []
+        refs: list[int] = []
         for citation in sentence.citations:
             if citation.passage not in sources:
                 sources.append(citation.passage)
-            refs.append(f"[{sources.index(citation.passage) + 1}]")
-        lines.append(f"- {sentence.text} {''.join(dict.fromkeys(refs))}")
-    if sources:
+            if (n := sources.index(citation.passage) + 1) not in refs:
+                refs.append(n)
+        sentences.append({"text": sentence.text, "sources": refs})
+    quotes = [(c.passage, c.quote) for s in result.sentences for c in s.citations]
+    return {
+        "status": result.status,
+        "message": result.message,
+        "sentences": sentences,
+        "sources": [
+            {
+                "n": n,
+                **_page(passage),
+                "ocr": passage.ocr,
+                "quotes": [quote for cited, quote in quotes if cited == passage],
+            }
+            for n, passage in enumerate(sources, start=1)
+        ],
+        "pages": [_page(p) for p in result.pages],
+        "notice": COS,
+    }
+
+
+def render(result: Answer) -> str:
+    """The answer as plain text: sentences with numbered sources, then the sources."""
+    view = as_json(result)
+    lines = [view["message"]] if view["message"] else []
+    for sentence in view["sentences"]:
+        lines.append(f"- {sentence['text']} {''.join(f'[{n}]' for n in sentence['sources'])}")
+    if view["sources"]:
         lines.append("\nSources")
-        for n, passage in enumerate(sources, start=1):
-            ocr = " (lu par OCR : vérifier sur la page)" if passage.ocr else ""
-            lines.append(f"[{n}] {passage.title} v{passage.version}, page {passage.page}{ocr}")
-            lines.append(f"    {passage.link}")
-            for sentence in result.sentences:
-                lines += [f"    « {c.quote} »" for c in sentence.citations if c.passage == passage]
-    if result.pages:
+        for source in view["sources"]:
+            ocr = " (lu par OCR : vérifier sur la page)" if source["ocr"] else ""
+            where = f"{source['title']} v{source['version']}, page {source['page']}"
+            lines.append(f"[{source['n']}] {where}{ocr}")
+            lines.append(f"    {source['link']}")
+            lines += [f"    « {quote} »" for quote in source["quotes"]]
+    if view["pages"]:
         lines.append("\nPages les plus proches")
-        lines += [f"- {p.title} v{p.version}, page {p.page} : {p.link}" for p in result.pages]
-    lines.append(f"\n{COS}")
+        lines += [
+            f"- {p['title']} v{p['version']}, page {p['page']} : {p['link']}" for p in view["pages"]
+        ]
+    lines.append(f"\n{view['notice']}")
     return "\n".join(lines)
 
 

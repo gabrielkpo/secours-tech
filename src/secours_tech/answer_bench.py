@@ -31,6 +31,7 @@ from secours_tech.answer import (
     Answer,
     Chat,
     answer,
+    problem_kind,
     render,
     retrieve,
 )
@@ -38,27 +39,6 @@ from secours_tech.bench import CASES, FINGERPRINT, SPLITS, Case, fingerprint, fr
 
 RECORDS = Path("eval/answers")
 SHEETS = Path("data/eval/answers")
-# the kind of check that blocked a draft, from its problem message; details (numbers, ids) are
-# left out of the record, since they can come from the doctrine
-PROBLEM_KINDS = (
-    ("no citation", "no_citation"),
-    ("unknown passage", "unknown_passage"),
-    ("quote shorter", "short_quote"),
-    ("word for word", "quote_not_found"),
-    ("in no quote", "number_not_quoted"),
-    ("link or markup", "markup"),
-    ("not supported", "not_supported"),
-    ("no verdict", "no_verdict"),
-    ("without a sentence", "empty_answer"),
-    ("clarification without", "bad_clarification"),
-    ("off the schema", "off_schema"),
-    ("finish_reason", "cut"),
-    ("unreadable", "unreadable"),
-)
-
-
-def problem_kind(problem: str) -> str:
-    return next((kind for text, kind in PROBLEM_KINDS if text in problem), "other")
 
 
 @dataclass(frozen=True)
@@ -72,7 +52,7 @@ class Outcome:
     top_similarity: float | None
     cited_pages: int  # distinct pages cited
     cited_expected: int  # of which expected pages
-    problems: tuple[str, ...]  # kinds, see PROBLEM_KINDS
+    problems: tuple[str, ...]  # kinds, see answer.PROBLEM_KINDS
     drafts: int  # 2 when the first draft was blocked and sent back for correction
     prompt_tokens: int
     completion_tokens: int

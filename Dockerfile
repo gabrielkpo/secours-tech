@@ -1,6 +1,7 @@
 # The pipeline image: the secours_tech package, its locked dependencies, poppler and tesseract.
-# It runs one command per container (migrations, load, ocr, embed, bench); the API is added at
-# J5. Base images are pinned by digest (tag in the comment); Dependabot moves both.
+# It runs one command per container (migrations, load, ocr, embed, bench) and the web API
+# (uvicorn --factory secours_tech.api:create_app). Base images are pinned by digest (tag in the
+# comment); Dependabot moves both.
 
 # uv only copies its binary into the build stage
 FROM ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 AS uv
