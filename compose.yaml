@@ -4,6 +4,7 @@
 #
 #   docker compose up -d --build db migrate             # image, database and schema
 #   docker compose run --rm pipeline secours_tech.load data/raw
+#   docker compose --profile api up -d api                # the API and its page, 127.0.0.1:8000
 #
 # data/ (the PDFs downloaded by hand, the OCR model, the cases) is mounted, never baked in.
 name: secours-tech
@@ -48,6 +49,20 @@ services:
       - ./data:/app/data
       - ./eval:/app/eval  # bench run writes its records to eval/runs
       - ./corpus:/app/corpus  # register and ocr_bench update the manifest and the OCR record
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    image: secours-tech:local
+    profiles: [api]  # docker compose --profile api up -d
+    command: ["uvicorn", "--factory", "secours_tech.api:create_app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql://secours_tech:${APP_DB_PASSWORD}@db:5432/secours_tech
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}  # the API refuses to start without it
+      DAILY_TOKENS: ${DAILY_TOKENS:-1000000}
+    ports:
+      - "127.0.0.1:8000:8000"  # the loopback only: no login of its own, see docs/architecture.md
     depends_on:
       migrate:
         condition: service_completed_successfully

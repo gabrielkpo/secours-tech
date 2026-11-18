@@ -7,9 +7,9 @@ An assistant for French firefighters, being built to answer operational question
 the national doctrine** (GDO, GTO, SSUAP, PSE), **cite the guide and page** behind every claim,
 and refuse when the doctrine does not cover the question.
 
-> **Status: milestone 3 of 12, expect breaking changes.** The corpus, its OCR, the evaluation
-> set and retrieval are built and measured; answer generation and its citation checks are
-> built but not scored yet; the API and the interface are not built. Personal project, not
+> **Status: milestone 5 of 12, expect breaking changes.** The corpus, its OCR, the evaluation
+> set and retrieval are built and measured; answers and their citation checks are scored by code
+> but not graded by hand yet; the API and its page run locally and are not deployed. Personal project, not
 > validated by the French civil protection: it does not replace training or command. See
 > [Roadmap](#roadmap).
 
@@ -120,6 +120,12 @@ uv run python -m secours_tech.load data/raw       # text layer, page routes, sec
 uv run pytest                                     # set TEST_DATABASE_URL to run the database tests
 ```
 
+Once the chunks are embedded (`MISTRAL_API_KEY` set), the API and its page:
+
+```bash
+uv run uvicorn --factory secours_tech.api:create_app   # http://127.0.0.1:8000
+```
+
 The OCR, embedding and evaluation steps, their costs and their `--dry-run` options are in
 [docs/RUNNING.md](docs/RUNNING.md), with the same pipeline run in Docker (`docker compose`, a
 local Postgres included).
@@ -133,7 +139,7 @@ local Postgres included).
 | J2 Evaluation set: 31 cases checked by a firefighter | done; 9 frozen for the final test |
 | J3 Retrieval: embeddings, full text, fusion, reranking | measured; chunk-size trials to come |
 | J4 Generation: structured answers, citation check, refusals | in progress: answers scored by code on the dev split; grades by hand next |
-| J5 App: FastAPI with rate limit, query log, minimal UI | planned |
+| J5 App: FastAPI with rate limit, query log, minimal UI | in progress: API, page, query log and limits run locally; deployment behind the identity proxy next |
 | J6 Collection: sources manifest, monthly watch | done; downloads stay manual |
 | J7 Production: Docker, Helm, Kubernetes, continuous deployment | in progress: pipeline image, local compose, Helm chart for the database tested on kind |
 | J8 Read-only MCP server | planned |
@@ -149,6 +155,8 @@ local Postgres included).
 | `src/secours_tech/load.py`, `db.py`, `migrations/` | Postgres schema, migrations and the loader |
 | `src/secours_tech/ocr.py`, `ocr_bench.py`, `mistral.py` | OCR of image pages, the per-guide OCR gate, the Mistral client |
 | `src/secours_tech/embed.py`, `rerank.py` | Embeddings (`mistral-embed`, local `multilingual-e5-base`) and local reranking |
+| `src/secours_tech/answer.py`, `answer_bench.py`, `text.py` | Answers and their checks, the answer bench |
+| `src/secours_tech/api.py`, `web/` | Web API (FastAPI), its limits and query log, the page |
 | `src/secours_tech/bench.py`, `runs.py`, `eval/` | Evaluation bench, frozen test fingerprint, run records |
 | `src/secours_tech/collect.py`, `corpus/` | Official sources manifest, monthly watch, OCR gate record |
 | `Dockerfile`, `compose.yaml`, `deploy/` | Pipeline image (non-root, built for amd64 and arm64), local stack, Helm chart and its kind test |
@@ -164,7 +172,10 @@ local Postgres included).
   the question with the 8 retrieved passages, then the drafted sentences with their quotes
   (Mistral chat, two calls). All under Mistral's API terms. Model weights come from Hugging Face
   at pinned revisions.
-- **Planned**: the API will log questions without an IP address or account.
+- **Kept by the API**: each question in the `queries` table, with its status, the pages cited
+  and the tokens used, without an IP address or account, deleted after 90 days. A question may
+  still hold personal data typed by a user: the page asks not to, since it goes to Mistral and
+  to the log. Rate limits are counted in memory, per IP address, and never stored.
 
 ## Limitations
 
@@ -182,6 +193,9 @@ local Postgres included).
   answers get no answer, mostly complex situations and tasks by function. The similarity
   threshold below which a question is refused without a call is not calibrated, and numbers
   written in words are not checked against the quotes.
+- **No login of its own.** The API and its page are meant to run behind the identity proxy of
+  the cluster (D25), which is not deployed yet; run alone, they answer anyone who can reach
+  them, within the rate limits and the daily token cap.
 - **Scope.** National doctrine only: no departmental procedures, no field data, no medical advice
   for an individual case.
 
