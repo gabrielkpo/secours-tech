@@ -12,7 +12,8 @@ Every step can refuse; none can let an unchecked sentence through (docs/ARCHITEC
    (three words at least) appears word for word in the passage it cites; every number of a
    sentence appears in one of its quotes; no link, image or markup.
 4. A second call reads each sentence with its quotes only and says whether they support it; it
-   can only block too (D17).
+   can only block too (D17). A clarification question is checked by code (one short question,
+   no number) and by this call (it asserts nothing): it is shown without a citation.
 5. A blocked draft is sent back once with the list of its problems, and the corrected draft
    goes through every check again. No check is relaxed: a correction can only pass the same
    checks, be blocked again, or refuse.
@@ -35,6 +36,7 @@ SEED = 11112026  # with temperature 0, the same question and passages give the s
 PASSAGES = 8  # chunks given to the model
 MAX_QUESTION = 500  # characters; a question is a sentence or two, never a document
 MIN_QUOTE_WORDS = 3  # a shorter quote ("le feu") proves nothing
+MAX_CLARIFICATION = 200  # characters; one short question, shown without a citation
 GENERATION_TOKENS = 1500
 CORRECTIONS = 1  # times a blocked draft is sent back with its problems, checked again
 VERIFICATION_TOKENS = 400
@@ -96,6 +98,8 @@ Corrige-la, avec les mêmes règles et le même format JSON :
 - un chiffre absent des citations : ajoute la citation qui le contient, ou retire le chiffre ;
 - une phrase que ses citations n'appuient pas : réduis-la à ce que disent ses citations, ou
   retire-la ;
+- une question de précision refusée : une seule question, de 200 caractères au plus, sans
+  chiffre, qui n'affirme et ne conseille rien ;
 - si les passages ne permettent pas de répondre, refuse (statut "refusal").
 """
 
@@ -111,6 +115,11 @@ situation) se lit dans les citations. Si la phrase dit qui fait l'action (une fo
 conducteur ou le chef d'agrès, un engin, une équipe), une citation doit nommer celui-là : une
 citation qui ne dit pas qui agit ne l'appuie pas. Une phrase plus générale, plus affirmative ou
 plus précise que ses citations vaut false. Dans le doute, false.
+
+L'objet peut aussi contenir "clarification" : une question de précision posée à l'utilisateur,
+affichée sans citation. "clarification_neutral" vaut true seulement si c'est une simple question
+qui n'affirme, ne conseille et ne suggère rien : aucune consigne, aucune valeur, aucun fait. Si
+"clarification" est vide, true. Dans le doute, false.
 """
 
 
@@ -141,7 +150,13 @@ ANSWER_SCHEMA = _object(
 _VERDICT = _object(
     {"sentence": {"type": "integer"}, "supported": {"type": "boolean"}}, ["sentence", "supported"]
 )
-VERIFY_SCHEMA = _object({"verdicts": {"type": "array", "items": _VERDICT}}, ["verdicts"])
+VERIFY_SCHEMA = _object(
+    {
+        "verdicts": {"type": "array", "items": _VERDICT},
+        "clarification_neutral": {"type": "boolean"},
+    },
+    ["verdicts", "clarification_neutral"],
+)
 
 Chat = Callable[[dict], dict]  # a chat/completions payload -> the API's JSON answer
 
@@ -210,6 +225,7 @@ PROBLEM_KINDS = (
     ("no verdict", "no_verdict"),
     ("without a sentence", "empty_answer"),
     ("clarification without", "bad_clarification"),
+    ("clarification that asserts", "bad_clarification"),
     ("off the schema", "off_schema"),
     ("finish_reason", "cut"),
     ("unreadable", "unreadable"),
@@ -354,16 +370,35 @@ def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], lis
     return sentences, problems
 
 
+def clarification_problems(text: str) -> list[str]:
+    """Why a clarification question cannot be shown: it has no citation, so it must be one short
+    question with no number in it; whether it asserts anything is left to the verification."""
+    reasons = []
+    if not text or _MARKUP.search(text):
+        reasons.append("empty, or a link or markup")
+    if len(text) > MAX_CLARIFICATION:
+        reasons.append(f"longer than {MAX_CLARIFICATION} characters")
+    if numbers(text):
+        reasons.append("a number in it")
+    if not text.endswith("?") or re.search(r"[.!?;]", text[:-1]):
+        reasons.append("not a single question")
+    return [f"a clarification without a plain question: {reason}" for reason in reasons]
+
+
 def verify(
-    sentences: Sequence[Sentence], chat: Chat, usage: dict[str, dict[str, int]]
+    sentences: Sequence[Sentence],
+    chat: Chat,
+    usage: dict[str, dict[str, int]],
+    clarification: str = "",
 ) -> list[str]:
-    """Problems found by the second call (D17): a sentence its quotes do not support, or a
-    verdict missing."""
+    """Problems found by the second call (D17): a sentence its quotes do not support, a verdict
+    missing, or a clarification question that asserts something."""
     data = {
         "sentences": [
             {"sentence": n, "text": s.text, "citations": [c.quote for c in s.citations]}
             for n, s in enumerate(sentences, start=1)
-        ]
+        ],
+        "clarification": clarification,
     }
     result = _call(
         chat,
@@ -381,6 +416,8 @@ def verify(
         raise ModelOutputError("verification: off the schema")
     verdicts = {v["sentence"]: v.get("supported") for v in rows}
     problems = []
+    if clarification and result.get("clarification_neutral") is not True:
+        problems.append("a clarification that asserts something, says the verification")
     for n in range(1, len(sentences) + 1):
         if n not in verdicts:
             problems.append(f"sentence {n}: no verdict")
@@ -429,10 +466,12 @@ def answer(
             sentences, problems = check(draft, passages)
             if status == "answer" and not sentences:
                 problems.append("an answer without a sentence")
-            if status == "clarification" and (not clarification or _MARKUP.search(clarification)):
-                problems.append("a clarification without a plain question")
-            if sentences and not problems and verification:
-                problems += verify(sentences, chat, usage)
+            if status != "clarification":
+                clarification = ""  # not shown: the schema asks for it empty
+            else:
+                problems += clarification_problems(clarification)
+            if (sentences or clarification) and not problems and verification:
+                problems += verify(sentences, chat, usage, clarification)
         except ModelOutputError as error:  # not corrected: the reply is not even readable
             return Answer(
                 "blocked",

@@ -84,7 +84,9 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   typography: quotes, dashes, French spaces, invisible characters), that every number of a
   sentence appears in one of its quotes, and that no sentence holds a link, image or tag (D13).
   A second call reads each sentence with its quotes only and says whether they support all of
-  it, who does the action included (D17). One failed check blocks the whole answer: nothing is
+  it, who does the action included (D17). A clarification question has no citation, so code
+  allows one question of 200 characters at most with no number in it, and the second call
+  checks that it asserts nothing. One failed check blocks the whole answer: nothing is
   shown but the closest pages. Quotes from OCR pages are flagged, since the check compares them
   with the OCR text, not with the printed page. Output is bounded (`max_tokens`), and a cut or
   unreadable answer is blocked too.
