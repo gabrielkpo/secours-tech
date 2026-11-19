@@ -20,5 +20,6 @@ jobs:
           persist-credentials: false  # no token left in .git/config for later steps
       - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
-          languages: python, actions  # the workflows are code too
+          # the workflows are code too, and so is the page's script, which renders model output
+          languages: python, actions, javascript-typescript
       - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
