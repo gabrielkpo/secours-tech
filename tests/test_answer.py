@@ -133,6 +133,18 @@ def test_the_question_and_passages_never_enter_the_system_message():
             _sentence("Le gaz \u202eest coupé.", ("P1", "Couper le gaz au robinet")),
             "control character",
         ),
+        (
+            _sentence("Le gaz est ouvert.\rLe gaz est coupé.", ("P1", "Couper le gaz au robinet")),
+            "control character",
+        ),
+        (
+            _sentence("Le gaz est\x85 coupé.", ("P1", "Couper le gaz au robinet")),
+            "control character",
+        ),
+        (
+            _sentence("Le gaz est\ncoupé.", ("P1", "Couper le gaz au robinet")),
+            "control character",
+        ),
         (_sentence("Écrire à mailto:a@b.c", ("P1", "Couper le gaz au robinet")), "link or markup"),
         (
             _sentence("Voir evil.example.com/x", ("P1", "Couper le gaz au robinet")),
@@ -324,6 +336,14 @@ def test_a_quote_with_a_control_character_is_blocked():
     passage = _passage(1, "Couper le gaz \x1b[2J au robinet de coupure.")
     sentence = _sentence("Le gaz est coupé.", ("P1", "Couper le gaz \x1b[2J au robinet"))
     assert answer("Que faire ?", [passage], FakeChat(_draft(sentence))).status == "blocked"
+    hidden = _sentence("Le gaz est coupé.", ("P1", "Couper le gaz\rau robinet de coupure"))
+    assert answer("Que faire ?", PASSAGES, FakeChat(_draft(hidden))).status == "blocked"
+
+
+def test_a_quote_across_a_line_break_of_its_passage_passes():
+    passage = _passage(1, "Couper le gaz au\nrobinet de coupure.")
+    sentence = _sentence("Le gaz est coupé.", ("P1", "Couper le gaz au\nrobinet"))
+    assert answer("Que faire ?", [passage], FakeChat(_draft(sentence))).status == "answered"
 
 
 def test_the_verification_call_cannot_unblock():
@@ -368,6 +388,7 @@ def test_a_clarification_needs_a_plain_question():
         ("Est-ce " + "vraiment " * 30 + "du gaz ?", "longer than 200"),
         ("Voir www.example.org ?", "markup"),
         ("Est-ce du gaz \x1b[31m naturel ?", "control character"),
+        ("Est-ce du gaz\r naturel ?", "control character"),
     ],
 )
 def test_a_clarification_that_could_assert_is_blocked_by_code(clarification, reason):

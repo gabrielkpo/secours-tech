@@ -181,14 +181,20 @@ _MARKUP = re.compile(
 )
 
 
-def unsafe(text: str) -> str:
+# zero-width characters and the soft hyphen: invisible, without effect on a terminal or on the
+# text's direction, and dropped by `normalize` before any comparison
+_INVISIBLE = frozenset("\u200b\u200c\u200d\u2060\ufeff\u00ad")
+
+
+def unsafe(text: str, breaks: bool = False) -> str:
     """Why a text cannot be shown as it is, or "": a link or markup, or a control or format
-    character (a terminal escape, a direction override) once spaces and invisible characters are
-    normalized."""
-    plain = normalize(text)
-    if _MARKUP.search(plain):
+    character (a carriage return, a terminal escape, a direction override). The characters are
+    checked on the text as shown, not normalized; `breaks` allows a line break or a tab (a quote
+    copied across a line of its passage)."""
+    if _MARKUP.search(normalize(text)):
         return "link or markup"
-    if any(unicodedata.category(c) in ("Cc", "Cf") for c in plain):
+    allowed = _INVISIBLE | ({"\n", "\t"} if breaks else set())
+    if any(unicodedata.category(c) in ("Cc", "Cf") and c not in allowed for c in text):
         return "control character"
     return ""
 
@@ -404,7 +410,7 @@ def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], lis
             passage, quote = by_id.get(cited["passage"]), str(cited["quote"]).strip()
             if passage is None:  # the id the model wrote is not repeated back to it
                 problems.append(f"sentence {n}: unknown passage id")
-            elif unsafe(quote):
+            elif unsafe(quote, breaks=True):
                 problems.append(f"sentence {n}: link, markup or control character in a quote")
             elif len(normalize(quote).split()) < MIN_QUOTE_WORDS:
                 problems.append(f"sentence {n}: quote shorter than {MIN_QUOTE_WORDS} words")
