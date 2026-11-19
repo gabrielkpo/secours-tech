@@ -230,6 +230,8 @@ def test_a_decimal_comma_and_point_are_the_same_number():
         ("du CO2 à 5 %", {"CO2", "5"}),
         ("des masques FFP2 ou FFP3, à50 m", {"FFP2", "FFP3", "à50"}),
         ("à 50m du feu", {"50"}),
+        ("relève à 06h30, 2x70 mm, 1m3", {"06h30", "2x70", "1m3"}),
+        ("de _500 m_ et 1er", {"500", "1"}),
     ],
 )
 def test_numbers_are_read_whole_with_their_codes_and_exponents(text, found):
@@ -251,6 +253,11 @@ def test_numbers_are_read_whole_with_their_codes_and_exponents(text, found):
         ("La lumière va à 3*10^5 m/s.", "une vitesse de 3*10^8 m/s", False),
         ("Le décret date de 1998.", "le décret de 1998^4 fixe", True),
         ("Le CO2 est toxique.", "le CO2 est un gaz toxique", True),
+        ("Relève prévue à 06h00.", "relève prévue à 06h30 au plus tard", False),
+        ("Prévoir 2x110 mm.", "établir 2x70 mm de tuyaux", False),
+        ("Établir 2x70 mm.", "établir 2x70 mm de tuyaux", True),
+        ("Périmètre de _500 m_.", "établir un périmètre de 50 m", False),
+        ("Un périmètre de 50m.", "établir un périmètre de 50 m", True),
     ],
 )
 def test_a_figure_must_be_a_whole_number_of_its_quotes(sentence, quote, passes):

@@ -160,11 +160,16 @@ VERIFY_SCHEMA = _object(
 
 Chat = Callable[[dict], dict]  # a chat/completions payload -> the API's JSON answer
 
-# a figure: a word with a digit in it, read whole (a code such as "FFP2" or "RCH4", a unit such
-# as "m3", a footnote call glued to a word such as "noter1"), or a number, its thousands grouped
-# by spaces as the doctrine writes them ("1 500" is one number), with its exponent ("10^8")
+# a figure: a word mixing letters and digits, read whole (a code such as "FFP2", a unit such as
+# "m3", a time such as "06h30", a hose lay such as "2x70", a footnote call glued to a word such
+# as "noter1"), or a number, its thousands grouped by spaces as the doctrine writes them ("1 500"
+# is one number), with its exponent ("10^8"); "50m" is the number 50, "_" separates words
 _NUMBER = re.compile(
-    r"(?<!\w)(?:[^\W\d_]+\d\w*|(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*(?:\^\d+)?)"
+    r"(?<![^\W_])(?:"
+    r"[^\W\d_]+\d[^\W_]*"
+    r"|\d+[^\W\d_]+\d[^\W_]*"
+    r"|(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*(?:\^\d+)?"
+    r")"
 )
 # a link, a Markdown link or image, an HTML tag: the answer is rendered as text, and a link in a
 # model's output is how injected instructions leak data
