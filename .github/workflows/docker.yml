@@ -27,7 +27,7 @@ jobs:
           test "$(docker run --rm secours-tech:local id -u)" = 10001
           docker run --rm secours-tech:local sh -c 'pdftotext -v && tesseract --version' 2>&1 | head -2
           docker run --rm secours-tech:local python -m secours_tech.load --help > /dev/null
-      - name: Migrations apply through compose, as a non-superuser
+      - name: Migrations apply through compose, as a non-superuser, and the API starts
         env:
           COMPOSE_PROJECT_NAME: smoke
         run: |
@@ -39,9 +39,15 @@ jobs:
             "SELECT count(*) FROM schema_migrations" | grep -qx "$(ls src/secours_tech/migrations/*.sql | wc -l)"
           docker compose exec -T db psql -U postgres -d secours_tech -tAc \
             "SELECT rolsuper FROM pg_roles WHERE rolname = 'secours_tech'" | grep -qx f
+          # an empty index has no chunk left to embed, so the API starts; no Mistral call is made
+          MISTRAL_API_KEY=not-a-key docker compose --profile api up -d --no-build api
+          for _ in $(seq 30); do curl -fsS http://127.0.0.1:8000/health > /dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"ok"'
+          curl -fsS http://127.0.0.1:8000/ | grep -q 'aucune donnée personnelle'
+          curl -fsS -o /dev/null http://127.0.0.1:8000/static/app.js
       - name: Logs
         if: failure()
         env:  # compose refuses to read its file without them; nothing is started here
           POSTGRES_PASSWORD: unused
           APP_DB_PASSWORD: unused
-        run: docker compose -p smoke logs
+        run: docker compose -p smoke --profile api logs

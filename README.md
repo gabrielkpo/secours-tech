@@ -206,14 +206,15 @@ local Postgres included).
 
 ```bash
 uv sync --locked
-uv tool install pre-commit && pre-commit install   # ruff and gitleaks before each commit
+uv tool install pre-commit && pre-commit install   # ruff, gitleaks, no file over 10 MB
 uv run pytest --cov      # coverage floor in pyproject.toml; mypy and ruff run in CI too
 ```
 
 One pull request per change, titled with Conventional Commits and squash-merged into a
 protected `main`. The code is written with Claude Code under the author's direction: each pull
 request gets two automated reviews (`/security-review`, `/code-review`), recorded in the PR, and
-CI (ruff, mypy, pytest with coverage, gitleaks, CodeQL); the author, a firefighter, is the only
+CI (ruff, mypy, pytest with coverage, gitleaks over the whole history, CodeQL on Python and
+JavaScript, the image started with its API); the author, a firefighter, is the only
 human reviewer. release-please prepares releases; none has been published yet.
 
 ## License

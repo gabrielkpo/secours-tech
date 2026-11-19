@@ -16,3 +16,5 @@
 - [ ] Tests added or updated
 - [ ] No API key, token or personal data in the diff
 - [ ] README updated if behaviour changed
+- [ ] Repository description, topics and diagrams still true
+- [ ] No private text, real message or real value from the corpus in this PR's title or body
