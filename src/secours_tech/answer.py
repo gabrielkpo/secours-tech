@@ -160,10 +160,12 @@ VERIFY_SCHEMA = _object(
 
 Chat = Callable[[dict], dict]  # a chat/completions payload -> the API's JSON answer
 
-# a number, its thousands grouped by spaces as the doctrine writes them ("1 500" is one number),
-# but not a digit glued to a letter or after a caret: a footnote call ("noter1"), an exponent
-# ("1998^4", "m3") or a code ("CO2") is not a figure the reader acts on
-_NUMBER = re.compile(r"(?<![^\W_])(?<!\^)(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*")
+# a figure: a word with a digit in it, read whole (a code such as "FFP2" or "RCH4", a unit such
+# as "m3", a footnote call glued to a word such as "noter1"), or a number, its thousands grouped
+# by spaces as the doctrine writes them ("1 500" is one number), with its exponent ("10^8")
+_NUMBER = re.compile(
+    r"(?<!\w)(?:[^\W\d_]+\d\w*|(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*(?:\^\d+)?)"
+)
 # a link, a Markdown link or image, an HTML tag: the answer is rendered as text, and a link in a
 # model's output is how injected instructions leak data
 _MARKUP = re.compile(r"://|www\.|\]\(|<\s*[a-z/!]", re.IGNORECASE)
@@ -240,9 +242,17 @@ def problem_kind(problem: str) -> str:
 
 
 def numbers(text: str) -> set[str]:
-    """The numbers of a text, a decimal comma read as a point ("1,5" and "1.5" are the same) and
-    thousands groups joined ("1 500" and "1500" are the same)."""
-    return {match.replace(" ", "").replace(",", ".") for match in _NUMBER.findall(normalize(text))}
+    """The figures of a text, a decimal comma read as a point ("1,5" and "1.5" are the same) and
+    thousands groups joined ("1 500" and "1500" are the same). A number with an exponent counts
+    as itself and as its base: "1998^4" can be a year and a footnote call, but "10^5" is not in
+    "10^8"; a word with a digit counts whole: "FFP1" is not in "FFP2", nor "1" in "noter1"."""
+    found = set()
+    for match in _NUMBER.findall(normalize(text)):
+        figure = match.replace(" ", "").replace(",", ".")
+        found.add(figure)
+        if "^" in figure and figure[0].isdigit():
+            found.add(figure.split("^")[0])
+    return found
 
 
 def retrieve(conn, embedder, question: str, limit: int = PASSAGES) -> list[Passage]:

@@ -220,16 +220,19 @@ def test_a_decimal_comma_and_point_are_the_same_number():
     [
         ("est de 1 000 litres", {"1000"}),
         ("est de 1\u00a0500 m", {"1500"}),
-        ("de 10 000 à 180 000 m3", {"10000", "180000"}),
+        ("de 10 000 à 180 000 m3", {"10000", "180000", "m3"}),
         ("1 500,5 kg", {"1500.5"}),
         ("en 2010 500 victimes", {"2010", "500"}),
         ("de 1 5000 m", {"1", "5000"}),
-        ("de noter1 que la zone", set()),
-        ("le décret de 1998^4", {"1998"}),
-        ("du CO2 à 5 %", {"5"}),
+        ("de noter1 que la zone", {"noter1"}),
+        ("le décret de 1998^4", {"1998^4", "1998"}),
+        ("à 3*10^8 m/s", {"3", "10^8", "10"}),
+        ("du CO2 à 5 %", {"CO2", "5"}),
+        ("des masques FFP2 ou FFP3, à50 m", {"FFP2", "FFP3", "à50"}),
+        ("à 50m du feu", {"50"}),
     ],
 )
-def test_numbers_are_read_whole_and_footnote_calls_are_not_numbers(text, found):
+def test_numbers_are_read_whole_with_their_codes_and_exponents(text, found):
     assert numbers(text) == found
 
 
@@ -241,6 +244,13 @@ def test_numbers_are_read_whole_and_footnote_calls_are_not_numbers(text, found):
         ("La distance est de 1500 m.", "est de 1 500 m autour du site", True),
         ("La distance est de 1 500 m.", "est de 1 500 m autour du site", True),
         ("La zone est balisée à 1 mètre.", "de noter1 que la zone est balisée", False),
+        ("Masques de type FFP1 au minimum.", "masques de type FFP2 ou FFP3", False),
+        ("Masques de type FFP2 au minimum.", "masques de type FFP2 ou FFP3", True),
+        ("Engager une équipe RCH1.", "engager une équipe RCH4", False),
+        ("Un périmètre à100 m.", "établir un périmètre de 50 m", False),
+        ("La lumière va à 3*10^5 m/s.", "une vitesse de 3*10^8 m/s", False),
+        ("Le décret date de 1998.", "le décret de 1998^4 fixe", True),
+        ("Le CO2 est toxique.", "le CO2 est un gaz toxique", True),
     ],
 )
 def test_a_figure_must_be_a_whole_number_of_its_quotes(sentence, quote, passes):

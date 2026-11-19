@@ -82,8 +82,8 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   passages by id with a quote. Code then checks that every sentence cites, that every quote has
   three words or more and appears word for word in its passage (text compared without
   typography: quotes, dashes, French spaces, invisible characters), that every number of a
-  sentence appears whole in one of its quotes ("1 500" is one number; a footnote call
-  glued to a word is none), and that no sentence holds a link, image or tag (D13).
+  sentence appears whole in one of its quotes ("1 500" is one number, a code such as
+  "FFP2" one figure, "FFP1" another), and that no sentence holds a link, image or tag (D13).
   A second call reads each sentence with its quotes only and says whether they support all of
   it, who does the action included (D17). A clarification question has no citation, so code
   allows one question of 200 characters at most with no number in it, and the second call
