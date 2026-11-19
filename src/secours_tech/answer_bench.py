@@ -230,8 +230,9 @@ def scored_test(folder: Path = RECORDS) -> list[Path]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Answer bench: ask every case of a split (three Mistral calls per question,"
-        " about 3,000 tokens), write a record of scores and a grading sheet."
+        description="Answer bench: ask every case of a split (one to four chat calls per question,"
+        " about 4,600 tokens on the development split), write a record of scores and a grading"
+        " sheet."
     )
     parser.add_argument("--cases", type=Path, default=CASES)
     parser.add_argument("--fingerprint", type=Path, default=FINGERPRINT)

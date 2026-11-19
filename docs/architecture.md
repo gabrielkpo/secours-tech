@@ -9,11 +9,13 @@ flowchart LR
     P --> O["ocr + ocr_bench index: OCR text of the guides that pass the gate"]
     L --> I[("Postgres: chunks, full text, embeddings")]
     O --> I
-    Q["Question"] --> R["retrieval: full text, vectors, RRF"]
+    Q["Question"] --> R["retrieval: 8 nearest chunks, mistral-embed vectors"]
     I --> R
     R --> G["generation: JSON sentences and quotes"]
     G --> C["checks: quotes verbatim, numbers quoted, no markup"]
     C --> V["verification call: quotes support each sentence"]
+    C -.->|blocked: sent back once| G
+    V -.->|blocked: sent back once| G
     W["page + API: limits, daily token cap"] --> Q
     V --> J[("queries log, 90 days")]
 ```
@@ -30,10 +32,10 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   questions have used `DAILY_TOKENS` Mistral chat tokens (1,000,000 by default) new questions
   are refused until midnight UTC; those already running finish, so the cap is approximate. A
   question gets 90 seconds for its Mistral calls, retries included, and the API's queries 10
-  seconds each. The service refuses to start without its key, its database or a vector for every current
-  chunk: there is no degraded mode. The page renders answers as text only (`textContent`,
-  links only to `https://`), under a Content Security Policy that allows the site's own script
-  and nothing else. It has no login: in production it sits behind the cluster's identity proxy
+  seconds each. The service refuses to start without its key, its database or a vector for
+  every current chunk: there is no degraded mode. The page renders answers as text only
+  (`textContent`, links only to `https://`), under a Content Security Policy that allows the
+  site's own script and nothing else. It has no login: in production it sits behind the cluster's identity proxy
   (D25).
 - **Query log without identity.** `queries` keeps each question, its status, the kinds of
   check that blocked it, the pages cited, the similarity of the nearest passage, tokens and
@@ -91,12 +93,14 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   says whether they support all of it, who does the action included (D17); it must give exactly
   one verdict per sentence. A clarification question has no citation, so code
   allows one question of 200 characters at most with no number in it, and the second call
-  checks that it asserts nothing. One failed check blocks the whole answer: nothing is
-  shown but the closest pages. Quotes from OCR pages are flagged, since the check compares them
-  with the OCR text, not with the printed page. Output is bounded (`max_tokens`), and a cut or
-  unreadable answer is blocked too.
-- **One Postgres database** (pgvector) holds documents, chunks and, later, the query log and
-  evaluation runs, so the dashboard can join them. Schema changes are plain SQL files in
+  checks that it asserts nothing. A blocked draft is sent back once with the list of its
+  problems, and the corrected draft goes through every check again; if it is blocked again,
+  nothing is shown but the closest pages. A question costs one embedding and one to four chat
+  calls, about 4,600 tokens on the development split (up to 9,100). Quotes from OCR pages are
+  flagged, since the check compares them with the OCR text, not with the printed page. Output is
+  bounded (`max_tokens`), and a cut or unreadable answer is blocked too.
+- **One Postgres database** (pgvector) holds documents, chunks, embeddings and the query log;
+  evaluation runs are JSON records in `eval/`. Schema changes are plain SQL files in
   `src/secours_tech/migrations/`, applied once each in name order.
 - **Full-text vector computed by Postgres** (`tsv`, text search configuration `fr`: `unaccent`
   then the French stemmer), so it cannot drift from the chunk text and "electricite" finds

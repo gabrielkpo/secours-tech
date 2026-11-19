@@ -1,9 +1,11 @@
 """Answers (J4): retrieval, one generation call, the citation checks, one verification call.
 
-Every step can refuse; none can let an unchecked sentence through (docs/ARCHITECTURE.md):
+Every step can refuse; none can let an unchecked sentence through (docs/architecture.md):
 
 1. The question is embedded with `mistral-embed` and the nearest chunks of the current guides
-   are retrieved (D21). Below a similarity threshold, the answer is a refusal without a call.
+   are retrieved (D21). With `min_similarity`, a question whose nearest chunk is further is
+   refused without a call; it is off by default, since no threshold separates the bench's
+   cases (docs/EVALUATION.md).
 2. The model, pinned and at temperature 0, gets fixed instructions as its system message and
    the question with the passages as a separate JSON data message: neither can rewrite the
    instructions. It answers in a JSON schema: a status (answer, refusal, clarification) and
@@ -637,8 +639,8 @@ def render(result: Answer) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Answer one question from the indexed doctrine (three Mistral calls, about "
-        "3,000 tokens)."
+        description="Answer one question from the indexed doctrine (one embedding and one to four "
+        "chat calls; about 4,600 tokens a question on the development split, up to 9,100)."
     )
     parser.add_argument("question")
     parser.add_argument("--min-similarity", type=float, help="refuse below this similarity")
