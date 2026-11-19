@@ -32,7 +32,7 @@ file whose fingerprint changed is refused, with both editions described, until
 | Bench check | `python -m secours_tech.bench check` | no | Needs the cases in `data/eval/cases/` (not published). Run it in the image, whose poppler reads the PDF pages as the reference index does. |
 | Bench run | `python -m secours_tech.bench run --retriever vector --model e5` | only with `--model mistral` (one short call per question) | Writes a record to `eval/runs/`; `bench report eval/runs/*.json` prints the table. |
 | API and page | `uvicorn --factory secours_tech.api:create_app --no-proxy-headers` | Mistral embeddings and chat for each question asked, capped by `DAILY_TOKENS` | Listens on 127.0.0.1:8000. Refuses to start without the key or with chunks left unembedded; logs each question in `queries` (90 days). |
-| Answer | `python -m secours_tech.answer "<question>"` | Mistral embeddings and chat: about 3,000 tokens over three calls | Needs the `mistral-embed-2312` vectors. `--json` adds why a draft was blocked and the tokens used; `--min-similarity` refuses below a similarity. |
+| Answer | `python -m secours_tech.answer "<question>"` | Mistral embeddings and chat: one embedding and one to four chat calls, about 4,600 tokens a question on the development split (up to 9,100) | Needs the `mistral-embed-2312` vectors. `--json` adds why a draft was blocked and the tokens used; `--min-similarity` refuses below a similarity. |
 
 Every command is run with `uv run` from the repository root. A run's record names the commit it
 used and warns when the working tree had uncommitted changes.

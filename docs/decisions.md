@@ -1,6 +1,6 @@
 # Decisions
 
-The code and the notes refer to these decisions by number. Each line gives the decision, the
+The code and the docs refer to these decisions by number. Each line gives the decision, the
 option set aside and why. Dates are the day the decision was taken or last revised.
 
 | # | Decision | Set aside | Why | Date |
@@ -9,7 +9,10 @@ option set aside and why. Dates are the day the decision was taken or last revis
 | D7 | Every chunk starts with a context header (`guide › chapter › section`), for the embedding and the full-text search | No context; a context written by an LLM | A simple form of contextual retrieval: free, and a chunk keeps the meaning its section gives it | 2026-10-15 |
 | D10 | Hybrid retrieval: vectors plus French full text, fused by reciprocal rank (k = 60) | Vectors only | The doctrine is full of acronyms, distances and form numbers that exact matching finds | 2026-10-15 |
 | D11 | Rerank the first chunks with `bge-reranker-v2-m3` (local) only if the bench shows a gain | Always; never | No reranker on the Mistral API; measure before adding a stage | 2026-10-15 |
+| D13 | The citation check is code that can only block: every quote is found word for word in the passage it cites, and every figure of a sentence in one of its quotes | Trusting the model to quote | The central safeguard: a model writes fluent figures it did not read, and the guides must be quoted faithfully | 2026-10-15 |
 | D14 | A web API (FastAPI) with a limit of questions per client; a read-only MCP server later | An interface only | The API serves the page, the MCP server and tests alike; the doctrine is public | 2026-10-15 |
+| D16 | Complex situations are answered by fixed steps: sub-questions, a search for each, then an ordered procedure, each step cited | An agent that chooses its own tools | A fixed pipeline stays testable step by step | 2026-10-15 |
+| D17 | A second model call reads each sentence with its quotes and says whether they support it; it can only block | String equality alone | Equality proves the quotes, not the sentence that rewords them | 2026-10-15 |
 | D18 | Sections come from the printed table of contents (fallback: headings detected in the text); each chunk records its section path; pages are cut at section boundaries; contents pages are left out of the search | Chunks with no structure | Contents pages pollute the search; a procedure needs its whole section; PDF bookmarks are missing from almost every guide | 2026-10-15 |
 | D20 | Multi-vector reranking (late interaction, one vector per token) with BGE-M3, local, on the first 50 chunks, without storing per-token vectors; compared with D11 on the bench | Per-token vectors stored in the database (gigabytes; pgvector cannot compute the max-sim score) | The doctrine's acronyms, form codes and figures are diluted in a single vector; BGE-M3 is multilingual, local and free | 2026-11-11 |
 | D21 | Product first: ship the whole chain before tuning retrieval; production retrieves with `mistral-embed` vectors, without reranking | More retrieval trials first; reranking in production | Retrieval already reaches its recall@5 target; reranking costs tens of seconds per question on a CPU | 2026-11-11 |

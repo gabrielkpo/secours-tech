@@ -130,5 +130,7 @@ All three use `mistral-medium-2604` for generation and verification and the 8 ne
 - The cases are not published: others can check that the test split was not edited (its
   fingerprint) and how each score was produced (its record), not rerun it.
 - Answer scores count statuses and cited pages; whether an answer is right comes from the
-  firefighter's grades, not yet in. The refusal threshold on similarity is not calibrated: the
-  nearest passage scores 0.79 to 0.90 on every case, refusals expected or not.
+  firefighter's grades, not yet in. The refusal threshold on similarity is off by default: in the
+  latest answer record the six cases expecting a refusal have a nearest passage at 0.79 to 0.83,
+  and one answerable case sits at 0.80, so a threshold that refuses the six refuses it too; on
+  22 cases a threshold would be fitted to one case.
