@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 
 from secours_tech.env import setting
 
@@ -23,8 +24,9 @@ def connect(url: str | None = None, statement_timeout: int | None = None) -> psy
         )
     # autocommit: nothing is pending by accident; writes that belong together are wrapped
     # in an explicit `with conn.transaction():` block
-    options = {"options": f"-c statement_timeout={statement_timeout}"} if statement_timeout else {}
-    return psycopg.connect(url, autocommit=True, connect_timeout=10, **options)
+    if statement_timeout:
+        url = make_conninfo(url, options=f"-c statement_timeout={int(statement_timeout)}")
+    return psycopg.connect(url, autocommit=True, connect_timeout=10)
 
 
 def one(cursor: psycopg.Cursor) -> tuple:
