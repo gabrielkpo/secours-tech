@@ -192,8 +192,10 @@ local Postgres included).
 - **Answers are not graded yet.** Code scores statuses and cited pages; whether an answer is
   right, and any serious fault, comes from hand grades not yet in. Half the cases the doctrine
   answers get no answer, mostly complex situations and tasks by function. The similarity
-  threshold below which a question is refused without a call is not calibrated, and numbers
-  written in words are not checked against the quotes.
+  threshold below which a question is refused without a call is not calibrated. The number
+  check compares figures, not their units ("50 bars" passes against "50 mètres"), and numbers
+  written in words are not checked against the quotes: the verification call is the only check
+  of those.
 - **No login of its own.** The API and its page are meant to run behind the identity proxy of
   the cluster (D25), which is not deployed yet; run alone, they answer anyone who can reach
   them, within the rate limits and the daily token cap.

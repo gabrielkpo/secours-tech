@@ -160,7 +160,10 @@ VERIFY_SCHEMA = _object(
 
 Chat = Callable[[dict], dict]  # a chat/completions payload -> the API's JSON answer
 
-_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+# a number, its thousands grouped by spaces as the doctrine writes them ("1 500" is one number),
+# but not a digit glued to a letter or after a caret: a footnote call ("noter1"), an exponent
+# ("1998^4", "m3") or a code ("CO2") is not a figure the reader acts on
+_NUMBER = re.compile(r"(?<![^\W_])(?<!\^)(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*")
 # a link, a Markdown link or image, an HTML tag: the answer is rendered as text, and a link in a
 # model's output is how injected instructions leak data
 _MARKUP = re.compile(r"://|www\.|\]\(|<\s*[a-z/!]", re.IGNORECASE)
@@ -237,8 +240,9 @@ def problem_kind(problem: str) -> str:
 
 
 def numbers(text: str) -> set[str]:
-    """The numbers of a text, a decimal comma read as a point ("1,5" and "1.5" are the same)."""
-    return {match.replace(",", ".") for match in _NUMBER.findall(normalize(text))}
+    """The numbers of a text, a decimal comma read as a point ("1,5" and "1.5" are the same) and
+    thousands groups joined ("1 500" and "1500" are the same)."""
+    return {match.replace(" ", "").replace(",", ".") for match in _NUMBER.findall(normalize(text))}
 
 
 def retrieve(conn, embedder, question: str, limit: int = PASSAGES) -> list[Passage]:
@@ -312,11 +316,17 @@ def _call(
 
 def quoted(quote: str, text: str) -> bool:
     """Whether `quote` appears word for word in `text`, as whole words and whole numbers: "zone
-    de 5" is not in "zone de 50 mètres", nor "de 1" in "de 1,5 bar" or in "de 1 000 m". Both
-    are compared without typography (`normalize`)."""
+    de 5" is not in "zone de 50 mètres", nor "de 1" in "de 1,5 bar" or in "de 1 000 m", nor
+    "500 m" in "1 500 m", nor "5 °C" in "-5 °C", nor "3 W" in "10^3 W". Both are compared without
+    typography (`normalize`)."""
+    quote = normalize(quote)
     before = r"(?<!\w)(?<!\d[.,])"
-    after = r"(?!\w)(?![.,]\d)(?! \d{3}(?!\d))"
-    return re.search(before + re.escape(normalize(quote)) + after, normalize(text)) is not None
+    if re.match(r"\d", quote):  # not after a sign, a comparison or a caret
+        before += r"(?<![-+±\u2212<>≤≥^])"  # \u2212: minus sign
+    if re.match(r"\d{3}(?!\d)", quote):  # not the last group of a larger number
+        before += r"(?<!\d )"
+    after = r"(?!\w)(?![.,]\d)(?! \d{3}(?!\d))(?!\^)"
+    return re.search(before + re.escape(quote) + after, normalize(text)) is not None
 
 
 def _is_draft(draft) -> bool:
