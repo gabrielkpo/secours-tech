@@ -25,6 +25,7 @@ flagged: the check compares it with the OCR text, not with the printed page.
 import argparse
 import json
 import re
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -160,10 +161,42 @@ VERIFY_SCHEMA = _object(
 
 Chat = Callable[[dict], dict]  # a chat/completions payload -> the API's JSON answer
 
-_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
-# a link, a Markdown link or image, an HTML tag: the answer is rendered as text, and a link in a
-# model's output is how injected instructions leak data
-_MARKUP = re.compile(r"://|www\.|\]\(|<\s*[a-z/!]", re.IGNORECASE)
+# a figure: a word mixing letters and digits, read whole (a code such as "FFP2", a unit such as
+# "m3", a time such as "06h30", a hose lay such as "2x70", a footnote call glued to a word such
+# as "noter1"), or a number, its thousands grouped by spaces as the doctrine writes them ("1 500"
+# is one number), with its exponent ("10^8"); "50m" is the number 50, "_" separates words
+_NUMBER = re.compile(
+    r"(?<![^\W_])(?:"
+    r"[^\W\d_]+\d[^\W_]*"
+    r"|\d+(?:[.,]\d+)*[^\W\d_]+\d[^\W_]*"
+    r"|(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*(?:\^\d+)?"
+    r")"
+)
+# a link (a URL, a mail or phone link, a bare domain), a Markdown link or image, an HTML tag: the
+# answer is rendered as text, and a link in a model's output is how injected instructions leak data
+_MARKUP = re.compile(
+    r"://|www\.|mailto:|tel:|\]\(|<\s*[a-z/!]"
+    r"|\b[\w-]+\.(?:com|net|org|fr|eu|io|info|xyz|ru|cn|co|me|ly|app|dev)\b",
+    re.IGNORECASE,
+)
+
+
+# zero-width characters and the soft hyphen: invisible, without effect on a terminal or on the
+# text's direction, and dropped by `normalize` before any comparison
+_INVISIBLE = frozenset("\u200b\u200c\u200d\u2060\ufeff\u00ad")
+
+
+def unsafe(text: str, breaks: bool = False) -> str:
+    """Why a text cannot be shown as it is, or "": a link or markup, or a control or format
+    character (a carriage return, a terminal escape, a direction override). The characters are
+    checked on the text as shown, not normalized; `breaks` allows a line break or a tab (a quote
+    copied across a line of its passage)."""
+    if _MARKUP.search(normalize(text)):
+        return "link or markup"
+    allowed = _INVISIBLE | ({"\n", "\t"} if breaks else set())
+    if any(unicodedata.category(c) in ("Cc", "Cf") and c not in allowed for c in text):
+        return "control character"
+    return ""
 
 
 class ModelOutputError(ValueError):
@@ -215,6 +248,8 @@ class Answer:
 # the kind of check that blocked a draft, from its problem message; details (numbers, ids) are
 # left out of the bench record and the query log, since they can come from the doctrine
 PROBLEM_KINDS = (
+    ("clarification without", "bad_clarification"),
+    ("clarification that asserts", "bad_clarification"),
     ("no citation", "no_citation"),
     ("unknown passage", "unknown_passage"),
     ("quote shorter", "short_quote"),
@@ -223,9 +258,10 @@ PROBLEM_KINDS = (
     ("link or markup", "markup"),
     ("not supported", "not_supported"),
     ("no verdict", "no_verdict"),
+    ("verdict repeated", "bad_verdicts"),
+    ("empty sentence", "empty_sentence"),
+    ("control character", "markup"),
     ("without a sentence", "empty_answer"),
-    ("clarification without", "bad_clarification"),
-    ("clarification that asserts", "bad_clarification"),
     ("off the schema", "off_schema"),
     ("finish_reason", "cut"),
     ("unreadable", "unreadable"),
@@ -237,8 +273,17 @@ def problem_kind(problem: str) -> str:
 
 
 def numbers(text: str) -> set[str]:
-    """The numbers of a text, a decimal comma read as a point ("1,5" and "1.5" are the same)."""
-    return {match.replace(",", ".") for match in _NUMBER.findall(normalize(text))}
+    """The figures of a text, a decimal comma read as a point ("1,5" and "1.5" are the same) and
+    thousands groups joined ("1 500" and "1500" are the same). A number with an exponent counts
+    as itself and as its base: "1998^4" can be a year and a footnote call, but "10^5" is not in
+    "10^8"; a word with a digit counts whole: "FFP1" is not in "FFP2", nor "1" in "noter1"."""
+    found = set()
+    for match in _NUMBER.findall(normalize(text)):
+        figure = match.replace(" ", "").replace(",", ".")
+        found.add(figure)
+        if "^" in figure and figure[0].isdigit():
+            found.add(figure.split("^")[0])
+    return found
 
 
 def retrieve(conn, embedder, question: str, limit: int = PASSAGES) -> list[Passage]:
@@ -312,11 +357,17 @@ def _call(
 
 def quoted(quote: str, text: str) -> bool:
     """Whether `quote` appears word for word in `text`, as whole words and whole numbers: "zone
-    de 5" is not in "zone de 50 mètres", nor "de 1" in "de 1,5 bar" or in "de 1 000 m". Both
-    are compared without typography (`normalize`)."""
+    de 5" is not in "zone de 50 mètres", nor "de 1" in "de 1,5 bar" or in "de 1 000 m", nor
+    "500 m" in "1 500 m", nor "5 °C" in "-5 °C", nor "3 W" in "10^3 W". Both are compared without
+    typography (`normalize`)."""
+    quote = normalize(quote)
     before = r"(?<!\w)(?<!\d[.,])"
-    after = r"(?!\w)(?![.,]\d)(?! \d{3}(?!\d))"
-    return re.search(before + re.escape(normalize(quote)) + after, normalize(text)) is not None
+    if re.match(r"\d", quote):  # not after a sign, a comparison or a caret
+        before += r"(?<![-+±\u2212<>≤≥^])"  # \u2212: minus sign
+    if re.match(r"\d{3}(?!\d)", quote):  # not the last group of a larger number
+        before += r"(?<!\d )"
+    after = r"(?!\w)(?![.,]\d)(?! \d{3}(?!\d))(?!\^)"
+    return re.search(before + re.escape(quote) + after, normalize(text)) is not None
 
 
 def _is_draft(draft) -> bool:
@@ -348,15 +399,19 @@ def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], lis
     sentences, problems = [], []
     for n, item in enumerate(draft["sentences"], start=1):
         text = str(item["text"]).strip()
-        if _MARKUP.search(text):
-            problems.append(f"sentence {n}: link or markup")
+        if not normalize(text):
+            problems.append(f"sentence {n}: empty sentence")
+        if reason := unsafe(text):
+            problems.append(f"sentence {n}: {reason}")
         if not item["citations"]:
             problems.append(f"sentence {n}: no citation")
         citations = []
         for cited in item["citations"]:
             passage, quote = by_id.get(cited["passage"]), str(cited["quote"]).strip()
-            if passage is None:
-                problems.append(f"sentence {n}: unknown passage {cited['passage']!r}")
+            if passage is None:  # the id the model wrote is not repeated back to it
+                problems.append(f"sentence {n}: unknown passage id")
+            elif unsafe(quote, breaks=True):
+                problems.append(f"sentence {n}: link, markup or control character in a quote")
             elif len(normalize(quote).split()) < MIN_QUOTE_WORDS:
                 problems.append(f"sentence {n}: quote shorter than {MIN_QUOTE_WORDS} words")
             elif not quoted(quote, passage.text):
@@ -374,8 +429,8 @@ def clarification_problems(text: str) -> list[str]:
     """Why a clarification question cannot be shown: it has no citation, so it must be one short
     question with no number in it; whether it asserts anything is left to the verification."""
     reasons = []
-    if not text or _MARKUP.search(text):
-        reasons.append("empty, or a link or markup")
+    if not text or unsafe(text):
+        reasons.append("empty, or a link, markup or control character")
     if len(text) > MAX_CLARIFICATION:
         reasons.append(f"longer than {MAX_CLARIFICATION} characters")
     if numbers(text):
@@ -414,14 +469,20 @@ def verify(
         isinstance(v, dict) and isinstance(v.get("sentence"), int) for v in rows
     ):
         raise ModelOutputError("verification: off the schema")
-    verdicts = {v["sentence"]: v.get("supported") for v in rows}
     problems = []
     if clarification and result.get("clarification_neutral") is not True:
         problems.append("a clarification that asserts something, says the verification")
+    numbers_given = [v["sentence"] for v in rows]
+    if len(set(numbers_given)) != len(numbers_given) or not set(numbers_given) <= set(
+        range(1, len(sentences) + 1)
+    ):
+        # one verdict per sentence: a repeated or unknown number is not resolved, it blocks
+        problems.append("verification: a verdict repeated or for no sentence")
     for n in range(1, len(sentences) + 1):
-        if n not in verdicts:
+        given = [v.get("supported") for v in rows if v["sentence"] == n]
+        if not given:
             problems.append(f"sentence {n}: no verdict")
-        elif verdicts[n] is not True:
+        elif any(supported is not True for supported in given):
             problems.append(f"sentence {n}: not supported by its quotes")
     return problems
 
