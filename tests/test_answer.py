@@ -54,10 +54,12 @@ def _reply(content: dict | str, finish: str = "stop") -> dict:
 
 class FakeChat:
     """Answers the generation call with `draft` (then `corrected`, when given, for a
-    correction) and the verification call with `verdicts`."""
+    correction) and the verification call with `verdicts` and `neutral` (whether the
+    clarification question asserts nothing)."""
 
-    def __init__(self, draft, verdicts=None, corrected=None):
+    def __init__(self, draft, verdicts=None, corrected=None, neutral=True):
         self.draft, self.verdicts, self.corrected, self.payloads = draft, verdicts, corrected, []
+        self.neutral = neutral
 
     def __call__(self, payload: dict) -> dict:
         self.payloads.append(payload)
@@ -67,15 +69,10 @@ class FakeChat:
                 draft = self.corrected
             return draft if "choices" in draft else _reply(draft)
         data = json.loads(payload["messages"][1]["content"])
-        if self.verdicts is None:  # every sentence supported
-            return _reply(
-                {
-                    "verdicts": [
-                        {"sentence": s["sentence"], "supported": True} for s in data["sentences"]
-                    ]
-                }
-            )
-        return _reply({"verdicts": self.verdicts})
+        verdicts = self.verdicts
+        if verdicts is None:  # every sentence supported
+            verdicts = [{"sentence": s["sentence"], "supported": True} for s in data["sentences"]]
+        return _reply({"verdicts": verdicts, "clarification_neutral": self.neutral})
 
 
 def _draft(*sentences, status="answer", clarification=""):
@@ -246,10 +243,52 @@ def test_low_similarity_refuses_without_any_call():
 
 def test_a_clarification_needs_a_plain_question():
     variants = _draft(GOOD, status="clarification", clarification="Gaz naturel ou propane ?")
-    result = answer("Que faire ?", PASSAGES, FakeChat(variants))
+    chat = FakeChat(variants)
+    result = answer("Que faire ?", PASSAGES, chat)
     assert (result.status, result.message) == ("clarification", "Gaz naturel ou propane ?")
+    verified = json.loads(chat.payloads[-1]["messages"][1]["content"])
+    assert verified["clarification"] == "Gaz naturel ou propane ?"
     empty = _draft(GOOD, status="clarification", clarification=" ")
     assert answer("Que faire ?", PASSAGES, FakeChat(empty)).status == "blocked"
+
+
+@pytest.mark.parametrize(
+    ("clarification", "reason"),
+    [
+        ("Le périmètre est de 300 m pour une ligne HTB. Est-ce votre cas ?", "a number"),
+        ("Évacuez dans un rayon de cinquante mètres.", "not a single question"),
+        ("Évacuez tout le monde. Est-ce une ligne HTB ?", "not a single question"),
+        ("Est-ce du gaz naturel ? Ou du propane ?", "not a single question"),
+        ("Est-ce " + "vraiment " * 30 + "du gaz ?", "longer than 200"),
+        ("Voir www.example.org ?", "markup"),
+    ],
+)
+def test_a_clarification_that_could_assert_is_blocked_by_code(clarification, reason):
+    chat = FakeChat(_draft(status="clarification", clarification=clarification))
+    result = answer("Que faire ?", PASSAGES, chat)
+    assert (result.status, result.message) == ("blocked", answer_module.BLOCKED)
+    assert any(reason in p for p in result.problems), result.problems
+    assert _names(chat) == ["answer", "answer"]  # blocked by code, never verified
+
+
+def test_a_clarification_alone_is_verified_and_can_be_blocked():
+    draft = _draft(status="clarification", clarification="Faut-il évacuer tout le quartier ?")
+    chat = FakeChat(draft)
+    assert answer("Que faire ?", PASSAGES, chat).status == "clarification"
+    assert _names(chat) == ["answer", "verification"]
+    asserting = FakeChat(draft, neutral=False)
+    result = answer("Que faire ?", PASSAGES, asserting)
+    assert result.status == "blocked"
+    assert "asserts" in " ".join(result.problems)
+    assert _names(asserting) == ["answer", "verification", "answer", "verification"]
+
+
+def test_a_clarification_of_an_answer_is_dropped_not_shown():
+    draft = _draft(GOOD, clarification="Évacuez tout le quartier.")
+    chat = FakeChat(draft)
+    result = answer("Que faire ?", PASSAGES, chat)
+    assert (result.status, result.message) == ("answered", "")
+    assert json.loads(chat.payloads[-1]["messages"][1]["content"])["clarification"] == ""
 
 
 @pytest.mark.parametrize(

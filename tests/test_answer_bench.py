@@ -36,6 +36,7 @@ def test_problem_kinds_keep_the_check_not_its_details():
     assert problem_kind("sentence 2: number 30 in no quote") == "number_not_quoted"
     assert problem_kind("sentence 1: quote not found word for word in P3") == "quote_not_found"
     assert problem_kind("answer: off the schema") == "off_schema"
+    assert problem_kind("a clarification that asserts something") == "bad_clarification"
     assert problem_kind("something new") == "other"
 
 
