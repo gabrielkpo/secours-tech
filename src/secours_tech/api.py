@@ -9,14 +9,17 @@ question is logged in `queries` without an IP address or a user identifier and d
 
 Guards (docs/architecture.md), from the cheapest:
 
-- a request body above 2 KB, or without a length, is refused before it is read; a question has
-  1 to 500 characters;
+- a request body above 2 KB, without a length or sent in chunks, is refused before it is read;
+  a question has 1 to 500 characters;
 - each client (its IP address as uvicorn sees it) may ask 5 questions a minute and 50 a day;
-  behind a proxy, uvicorn must trust it (`--forwarded-allow-ips`), or every user shares the
-  proxy's address and one window;
+  uvicorn runs with `--no-proxy-headers`, since by default it takes the address from an
+  `X-Forwarded-For` header sent through 127.0.0.1, which any local client can write; behind a
+  proxy, it must trust that proxy alone (`--forwarded-allow-ips=<its address>`);
 - once the day's questions have used `DAILY_TOKENS` Mistral chat tokens (1,000,000 by default,
   a few euros at most), new questions are refused until midnight UTC and a warning is logged;
   the questions already running finish, so the cap can be passed by a few questions;
+- a question gets `ASK_SECONDS` (90) for its Mistral calls, retries and waits included; past
+  them it fails with a 502 instead of holding a worker for minutes;
 - the service refuses to start without the Mistral key, the database or the vectors of every
   current chunk: there is no degraded mode.
 
@@ -58,6 +61,8 @@ LIMITS = ((5, 60.0), (50, 86400.0))  # (questions, seconds) per client
 DAILY_TOKENS = 1_000_000  # Mistral tokens a day, every client together; DAILY_TOKENS overrides
 RETENTION = "90 days"  # questions may hold personal data typed by a user
 CHAT_TIMEOUT = 60  # seconds per Mistral call, retries apart
+ASK_SECONDS = 90  # for every Mistral call of one question, retries and waits included
+STATEMENT_MS = 10_000  # no query of the API runs longer
 HEADERS = {
     "Content-Security-Policy": (
         "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
@@ -163,7 +168,7 @@ def _production() -> tuple[Connect, object, Chat]:
         if absent := len(missing_inputs(conn, MistralEmbedder.name)):
             raise SystemExit(f"{absent} chunk inputs have no {MistralEmbedder.name} vector")
     return (
-        connect,
+        lambda: connect(statement_timeout=STATEMENT_MS),
         MistralEmbedder(key),
         lambda payload: post("chat/completions", payload, key, timeout=CHAT_TIMEOUT),
     )
@@ -177,7 +182,7 @@ def create_app(
     limiter: Limiter | None = None,
 ) -> FastAPI:
     """The application; without arguments, wired to the real database and Mistral."""
-    from secours_tech.mistral import MistralError
+    from secours_tech.mistral import DEADLINE, MistralError
 
     if connect is None or embedder is None or chat is None:
         connect, embedder, chat = _production()
@@ -190,6 +195,8 @@ def create_app(
     @app.middleware("http")
     async def guard(request: Request, call_next):
         if request.method == "POST":
+            if "transfer-encoding" in request.headers:  # its body would be read past the length
+                return _refuse(411, "La longueur de la requête est requise.")
             length = request.headers.get("content-length", "")
             if not length.isdigit():
                 return _refuse(411, "La longueur de la requête est requise.")
@@ -238,6 +245,7 @@ def create_app(
                 )
                 return reply
 
+            deadline = DEADLINE.set(time.monotonic() + ASK_SECONDS)
             try:
                 passages = retrieve(conn, embed, question)
                 top = passages[0].similarity if passages else None
@@ -251,8 +259,16 @@ def create_app(
                     ) from None
                 log.exception("ask: the answer failed")
                 raise HTTPException(500, "La question n'a pas pu être traitée.") from None
+            finally:
+                DEADLINE.reset(deadline)
             log_query(conn, question, result, top, time.perf_counter() - started, spent)
         return as_json(result)
+
+    @app.exception_handler(Exception)
+    async def failed(request: Request, error: Exception) -> JSONResponse:
+        """Any other failure (the database down, say): a plain 500 with the same headers."""
+        log.error("unhandled error on %s", request.url.path, exc_info=error)
+        return _refuse(500, "La question n'a pas pu être traitée.")
 
     @app.get("/")
     def page() -> FileResponse:

@@ -123,7 +123,7 @@ uv run pytest                                     # set TEST_DATABASE_URL to run
 Once the chunks are embedded (`MISTRAL_API_KEY` set), the API and its page:
 
 ```bash
-uv run uvicorn --factory secours_tech.api:create_app   # http://127.0.0.1:8000
+uv run uvicorn --factory secours_tech.api:create_app --no-proxy-headers   # http://127.0.0.1:8000
 ```
 
 The OCR, embedding and evaluation steps, their costs and their `--dry-run` options are in
