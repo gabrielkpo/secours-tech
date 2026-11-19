@@ -83,9 +83,10 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   three words or more and appears word for word in its passage (text compared without
   typography: quotes, dashes, French spaces, invisible characters), that every number of a
   sentence appears whole in one of its quotes ("1 500" is one number, a code such as
-  "FFP2" one figure, "FFP1" another), and that no sentence holds a link, image or tag (D13).
-  A second call reads each sentence with its quotes only and says whether they support all of
-  it, who does the action included (D17). A clarification question has no citation, so code
+  "FFP2" one figure, "FFP1" another), and that no sentence is empty or holds a link, image,
+  tag or control character (D13). A second call reads each sentence with its quotes only and
+  says whether they support all of it, who does the action included (D17); it must give exactly
+  one verdict per sentence. A clarification question has no citation, so code
   allows one question of 200 characters at most with no number in it, and the second call
   checks that it asserts nothing. One failed check blocks the whole answer: nothing is
   shown but the closest pages. Quotes from OCR pages are flagged, since the check compares them
