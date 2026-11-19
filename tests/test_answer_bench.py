@@ -37,6 +37,14 @@ def test_problem_kinds_keep_the_check_not_its_details():
     assert problem_kind("sentence 1: quote not found word for word in P3") == "quote_not_found"
     assert problem_kind("answer: off the schema") == "off_schema"
     assert problem_kind("a clarification that asserts something") == "bad_clarification"
+    assert (
+        problem_kind(
+            "a clarification without a plain question: empty, or a link, markup or "
+            "control character"
+        )
+        == "bad_clarification"
+    )
+    assert problem_kind("verification: a verdict repeated or for no sentence") == "bad_verdicts"
     assert problem_kind("something new") == "other"
 
 

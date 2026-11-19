@@ -99,3 +99,30 @@ def test_retry_after_is_honoured_and_a_truncated_answer_is_retried(monkeypatch):
     assert post("ocr", {}, "k") == {"ok": True}
     assert 7 <= waits[0] < 8 and len(waits) == 2
     assert mistral._wait(0, "\u00b2") < 3  # a non-ASCII digit is not a number of seconds
+
+
+def test_a_deadline_bounds_every_call_its_retries_and_its_waits(monkeypatch):
+    timeouts, waits = [], []
+
+    def busy(request, timeout):
+        timeouts.append(timeout)
+        raise urllib.error.HTTPError(request.full_url, 429, "busy", {"Retry-After": "30"}, None)
+
+    monkeypatch.setattr(mistral._OPENER, "open", busy)
+    monkeypatch.setattr(mistral.time, "sleep", waits.append)
+    token = mistral.DEADLINE.set(mistral.time.monotonic() + 10)
+    try:
+        with pytest.raises(MistralError, match="time limit"):
+            post("chat/completions", {}, "k", timeout=60)
+    finally:
+        mistral.DEADLINE.reset(token)
+    assert len(timeouts) == 1 and timeouts[0] <= 10  # the call itself is bounded too
+    assert waits == []  # a 30 s wait would pass the deadline: no wait, no retry
+
+    token = mistral.DEADLINE.set(mistral.time.monotonic() - 1)
+    try:
+        with pytest.raises(MistralError, match="time limit"):
+            post("chat/completions", {}, "k")
+    finally:
+        mistral.DEADLINE.reset(token)
+    assert len(timeouts) == 1  # past the deadline, no call at all

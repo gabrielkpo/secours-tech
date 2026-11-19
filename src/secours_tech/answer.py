@@ -25,6 +25,7 @@ flagged: the check compares it with the OCR text, not with the printed page.
 import argparse
 import json
 import re
+import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -171,9 +172,31 @@ _NUMBER = re.compile(
     r"|(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*(?:\^\d+)?"
     r")"
 )
-# a link, a Markdown link or image, an HTML tag: the answer is rendered as text, and a link in a
-# model's output is how injected instructions leak data
-_MARKUP = re.compile(r"://|www\.|\]\(|<\s*[a-z/!]", re.IGNORECASE)
+# a link (a URL, a mail or phone link, a bare domain), a Markdown link or image, an HTML tag: the
+# answer is rendered as text, and a link in a model's output is how injected instructions leak data
+_MARKUP = re.compile(
+    r"://|www\.|mailto:|tel:|\]\(|<\s*[a-z/!]"
+    r"|\b[\w-]+\.(?:com|net|org|fr|eu|io|info|xyz|ru|cn|co|me|ly|app|dev)\b",
+    re.IGNORECASE,
+)
+
+
+# zero-width characters and the soft hyphen: invisible, without effect on a terminal or on the
+# text's direction, and dropped by `normalize` before any comparison
+_INVISIBLE = frozenset("\u200b\u200c\u200d\u2060\ufeff\u00ad")
+
+
+def unsafe(text: str, breaks: bool = False) -> str:
+    """Why a text cannot be shown as it is, or "": a link or markup, or a control or format
+    character (a carriage return, a terminal escape, a direction override). The characters are
+    checked on the text as shown, not normalized; `breaks` allows a line break or a tab (a quote
+    copied across a line of its passage)."""
+    if _MARKUP.search(normalize(text)):
+        return "link or markup"
+    allowed = _INVISIBLE | ({"\n", "\t"} if breaks else set())
+    if any(unicodedata.category(c) in ("Cc", "Cf") and c not in allowed for c in text):
+        return "control character"
+    return ""
 
 
 class ModelOutputError(ValueError):
@@ -225,6 +248,8 @@ class Answer:
 # the kind of check that blocked a draft, from its problem message; details (numbers, ids) are
 # left out of the bench record and the query log, since they can come from the doctrine
 PROBLEM_KINDS = (
+    ("clarification without", "bad_clarification"),
+    ("clarification that asserts", "bad_clarification"),
     ("no citation", "no_citation"),
     ("unknown passage", "unknown_passage"),
     ("quote shorter", "short_quote"),
@@ -233,9 +258,10 @@ PROBLEM_KINDS = (
     ("link or markup", "markup"),
     ("not supported", "not_supported"),
     ("no verdict", "no_verdict"),
+    ("verdict repeated", "bad_verdicts"),
+    ("empty sentence", "empty_sentence"),
+    ("control character", "markup"),
     ("without a sentence", "empty_answer"),
-    ("clarification without", "bad_clarification"),
-    ("clarification that asserts", "bad_clarification"),
     ("off the schema", "off_schema"),
     ("finish_reason", "cut"),
     ("unreadable", "unreadable"),
@@ -373,15 +399,19 @@ def check(draft: dict, passages: Sequence[Passage]) -> tuple[list[Sentence], lis
     sentences, problems = [], []
     for n, item in enumerate(draft["sentences"], start=1):
         text = str(item["text"]).strip()
-        if _MARKUP.search(text):
-            problems.append(f"sentence {n}: link or markup")
+        if not normalize(text):
+            problems.append(f"sentence {n}: empty sentence")
+        if reason := unsafe(text):
+            problems.append(f"sentence {n}: {reason}")
         if not item["citations"]:
             problems.append(f"sentence {n}: no citation")
         citations = []
         for cited in item["citations"]:
             passage, quote = by_id.get(cited["passage"]), str(cited["quote"]).strip()
-            if passage is None:
-                problems.append(f"sentence {n}: unknown passage {cited['passage']!r}")
+            if passage is None:  # the id the model wrote is not repeated back to it
+                problems.append(f"sentence {n}: unknown passage id")
+            elif unsafe(quote, breaks=True):
+                problems.append(f"sentence {n}: link, markup or control character in a quote")
             elif len(normalize(quote).split()) < MIN_QUOTE_WORDS:
                 problems.append(f"sentence {n}: quote shorter than {MIN_QUOTE_WORDS} words")
             elif not quoted(quote, passage.text):
@@ -399,8 +429,8 @@ def clarification_problems(text: str) -> list[str]:
     """Why a clarification question cannot be shown: it has no citation, so it must be one short
     question with no number in it; whether it asserts anything is left to the verification."""
     reasons = []
-    if not text or _MARKUP.search(text):
-        reasons.append("empty, or a link or markup")
+    if not text or unsafe(text):
+        reasons.append("empty, or a link, markup or control character")
     if len(text) > MAX_CLARIFICATION:
         reasons.append(f"longer than {MAX_CLARIFICATION} characters")
     if numbers(text):
@@ -439,14 +469,20 @@ def verify(
         isinstance(v, dict) and isinstance(v.get("sentence"), int) for v in rows
     ):
         raise ModelOutputError("verification: off the schema")
-    verdicts = {v["sentence"]: v.get("supported") for v in rows}
     problems = []
     if clarification and result.get("clarification_neutral") is not True:
         problems.append("a clarification that asserts something, says the verification")
+    numbers_given = [v["sentence"] for v in rows]
+    if len(set(numbers_given)) != len(numbers_given) or not set(numbers_given) <= set(
+        range(1, len(sentences) + 1)
+    ):
+        # one verdict per sentence: a repeated or unknown number is not resolved, it blocks
+        problems.append("verification: a verdict repeated or for no sentence")
     for n in range(1, len(sentences) + 1):
-        if n not in verdicts:
+        given = [v.get("supported") for v in rows if v["sentence"] == n]
+        if not given:
             problems.append(f"sentence {n}: no verdict")
-        elif verdicts[n] is not True:
+        elif any(supported is not True for supported in given):
             problems.append(f"sentence {n}: not supported by its quotes")
     return problems
 

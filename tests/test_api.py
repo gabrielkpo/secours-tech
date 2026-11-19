@@ -1,6 +1,7 @@
 """Web API: the guards before any call, the checked answer as JSON, the query log without IP.
 The chat client and the embedder are fakes; nothing leaves the machine."""
 
+import time
 from contextlib import contextmanager
 
 import pytest
@@ -110,6 +111,16 @@ def test_bodies_are_bounded_before_they_are_read(indexed):
         headers={"Content-Type": "application/json"},
     )
     assert chunked.status_code == 411
+    both = client.post(
+        "/api/ask",
+        content=b'{"question": "gaz"}',
+        headers={
+            "Content-Type": "application/json",
+            "Content-Length": "19",
+            "Transfer-Encoding": "chunked",
+        },
+    )
+    assert both.status_code == 411  # a small length announced, a chunked body of any size sent
     assert indexed.execute("SELECT count(*) FROM queries").fetchone()[0] == 0
 
 
@@ -183,6 +194,48 @@ def test_any_other_failure_is_a_plain_500_and_is_logged(indexed):
     assert response.status_code == 500
     assert "embeddings" not in response.text
     assert indexed.execute("SELECT status FROM queries").fetchone() == ("error",)
+
+
+def test_the_mistral_calls_of_a_question_share_one_deadline(indexed):
+    from secours_tech.mistral import DEADLINE
+
+    seen = []
+    generation = FakeChat(DRAFT)
+
+    def timed(payload):
+        seen.append(DEADLINE.get())
+        return generation(payload)
+
+    before = time.monotonic()
+    assert _client(indexed, timed).post("/api/ask", json={"question": "gaz ?"}).status_code == 200
+    assert len(set(seen)) == 1
+    assert before + api_module.ASK_SECONDS <= seen[0] <= time.monotonic() + api_module.ASK_SECONDS
+    assert DEADLINE.get() is None
+
+
+def test_a_failure_outside_the_answer_is_a_plain_500_with_the_headers():
+    @contextmanager
+    def down():
+        raise OSError("connection refused to db:5432")
+        yield
+
+    app = create_app(down, FakeEmbedder(), FakeChat(DRAFT))
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/api/ask", json={"question": "gaz ?"}
+    )
+    assert response.status_code == 500
+    assert "5432" not in response.text
+    for name, value in HEADERS.items():
+        assert response.headers[name] == value
+
+
+def test_the_api_connection_bounds_its_queries(conn):
+    from secours_tech.db import connect
+
+    with connect(TEST_URL, statement_timeout=api_module.STATEMENT_MS) as bounded:
+        assert bounded.execute("SHOW statement_timeout").fetchone() == ("10s",)
+    with connect(TEST_URL) as unbounded:
+        assert unbounded.execute("SHOW statement_timeout").fetchone() == ("0",)
 
 
 def test_the_page_its_script_and_health_are_served(indexed):

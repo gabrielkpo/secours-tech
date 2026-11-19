@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import psycopg
+from psycopg.conninfo import make_conninfo
 
 from secours_tech.env import setting
 
@@ -12,7 +13,10 @@ log = logging.getLogger(__name__)
 MIGRATIONS = Path(__file__).parent / "migrations"
 
 
-def connect(url: str | None = None) -> psycopg.Connection:
+def connect(url: str | None = None, statement_timeout: int | None = None) -> psycopg.Connection:
+    """A connection to DATABASE_URL that fails within 10 s when the database does not answer;
+    with `statement_timeout` (ms), no query may run longer (the API sets it, the pipeline's long
+    loads and index builds do not)."""
     url = url or setting("DATABASE_URL")
     if not url:
         raise SystemExit(
@@ -20,7 +24,9 @@ def connect(url: str | None = None) -> psycopg.Connection:
         )
     # autocommit: nothing is pending by accident; writes that belong together are wrapped
     # in an explicit `with conn.transaction():` block
-    return psycopg.connect(url, autocommit=True)
+    if statement_timeout:
+        url = make_conninfo(url, options=f"-c statement_timeout={int(statement_timeout)}")
+    return psycopg.connect(url, autocommit=True, connect_timeout=10)
 
 
 def one(cursor: psycopg.Cursor) -> tuple:

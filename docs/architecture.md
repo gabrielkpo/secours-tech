@@ -22,12 +22,15 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
 
 ## Decisions
 - **API key server-side only.** The browser talks to our API, never to Mistral. The web API
-  (`api.py`) guards each question before any call, cheapest first: a body above 2 KB or
-  without a length is refused before it is read, a question has 1 to 500 characters, each
-  client IP may ask 5 questions a minute and 50 a day (behind a proxy, uvicorn must trust it
-  with `--forwarded-allow-ips`, or every user shares the proxy's address), and once the day's
+  (`api.py`) guards each question before any call, cheapest first: a body above 2 KB, without
+  a length or sent in chunks is refused before it is read, a question has 1 to 500 characters,
+  each client IP may ask 5 questions a minute and 50 a day (uvicorn runs with
+  `--no-proxy-headers`, so a client cannot pick its address with `X-Forwarded-For`; behind a
+  proxy, uvicorn must trust that proxy alone with `--forwarded-allow-ips`), and once the day's
   questions have used `DAILY_TOKENS` Mistral chat tokens (1,000,000 by default) new questions
-  are refused until midnight UTC; those already running finish, so the cap is approximate. The service refuses to start without its key, its database or a vector for every current
+  are refused until midnight UTC; those already running finish, so the cap is approximate. A
+  question gets 90 seconds for its Mistral calls, retries included, and the API's queries 10
+  seconds each. The service refuses to start without its key, its database or a vector for every current
   chunk: there is no degraded mode. The page renders answers as text only (`textContent`,
   links only to `https://`), under a Content Security Policy that allows the site's own script
   and nothing else. It has no login: in production it sits behind the cluster's identity proxy
@@ -83,9 +86,10 @@ Decision numbers (D5, D7...) refer to [decisions.md](decisions.md).
   three words or more and appears word for word in its passage (text compared without
   typography: quotes, dashes, French spaces, invisible characters), that every number of a
   sentence appears whole in one of its quotes ("1 500" is one number, a code such as
-  "FFP2" one figure, "FFP1" another), and that no sentence holds a link, image or tag (D13).
-  A second call reads each sentence with its quotes only and says whether they support all of
-  it, who does the action included (D17). A clarification question has no citation, so code
+  "FFP2" one figure, "FFP1" another), and that no sentence is empty or holds a link, image,
+  tag or control character (D13). A second call reads each sentence with its quotes only and
+  says whether they support all of it, who does the action included (D17); it must give exactly
+  one verdict per sentence. A clarification question has no citation, so code
   allows one question of 200 characters at most with no number in it, and the second call
   checks that it asserts nothing. One failed check blocks the whole answer: nothing is
   shown but the closest pages. Quotes from OCR pages are flagged, since the check compares them
