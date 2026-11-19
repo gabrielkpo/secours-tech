@@ -12,7 +12,10 @@ log = logging.getLogger(__name__)
 MIGRATIONS = Path(__file__).parent / "migrations"
 
 
-def connect(url: str | None = None) -> psycopg.Connection:
+def connect(url: str | None = None, statement_timeout: int | None = None) -> psycopg.Connection:
+    """A connection to DATABASE_URL that fails within 10 s when the database does not answer;
+    with `statement_timeout` (ms), no query may run longer (the API sets it, the pipeline's long
+    loads and index builds do not)."""
     url = url or setting("DATABASE_URL")
     if not url:
         raise SystemExit(
@@ -20,7 +23,8 @@ def connect(url: str | None = None) -> psycopg.Connection:
         )
     # autocommit: nothing is pending by accident; writes that belong together are wrapped
     # in an explicit `with conn.transaction():` block
-    return psycopg.connect(url, autocommit=True)
+    options = {"options": f"-c statement_timeout={statement_timeout}"} if statement_timeout else {}
+    return psycopg.connect(url, autocommit=True, connect_timeout=10, **options)
 
 
 def one(cursor: psycopg.Cursor) -> tuple:
