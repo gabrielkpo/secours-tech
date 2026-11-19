@@ -255,6 +255,7 @@ def test_numbers_are_read_whole_with_their_codes_and_exponents(text, found):
         ("Le CO2 est toxique.", "le CO2 est un gaz toxique", True),
         ("Relève prévue à 06h00.", "relève prévue à 06h30 au plus tard", False),
         ("Prévoir 2x110 mm.", "établir 2x70 mm de tuyaux", False),
+        ("Prévoir 2,5x110 mm.", "établir 2,5x70 mm de tuyaux", False),
         ("Établir 2x70 mm.", "établir 2x70 mm de tuyaux", True),
         ("Périmètre de _500 m_.", "établir un périmètre de 50 m", False),
         ("Un périmètre de 50m.", "établir un périmètre de 50 m", True),

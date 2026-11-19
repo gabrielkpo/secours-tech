@@ -167,7 +167,7 @@ Chat = Callable[[dict], dict]  # a chat/completions payload -> the API's JSON an
 _NUMBER = re.compile(
     r"(?<![^\W_])(?:"
     r"[^\W\d_]+\d[^\W_]*"
-    r"|\d+[^\W\d_]+\d[^\W_]*"
+    r"|\d+(?:[.,]\d+)*[^\W\d_]+\d[^\W_]*"
     r"|(?:\d{1,3}(?: \d{3})+(?!\d)|\d+)(?:[.,]\d+)*(?:\^\d+)?"
     r")"
 )
