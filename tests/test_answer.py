@@ -171,6 +171,14 @@ def test_a_quote_cut_inside_a_word_or_a_number_is_not_word_for_word():
         ("5 m du feu", "à 5 m du feu, puis", True),
         ("5 m du feu", "à 15 m du feu", False),
         ("la zone de 50 m.", "Établir la zone de 50 m. Puis", True),
+        ("500 m autour du site", "est de 1 500 m autour du site", False),
+        ("500 m autour du site", "est de 1\u00a0500 m autour du site", False),
+        ("1 500 m autour du site", "est de 1\u00a0500 m autour du site", True),
+        ("5 °C. Zone de", "de -5 °C. Zone de", False),
+        ("5 °C. Zone de", "de \u22125 °C. Zone de", False),
+        ("3 W environ", "de 10^3 W environ", False),
+        ("une puissance de 10", "une puissance de 10^3 W", False),
+        ("500 litres par minute", "débit de 500 litres par minute", True),
     ],
 )
 def test_quotes_match_whole_words_and_whole_numbers(quote, text, found):
@@ -205,6 +213,58 @@ def test_typography_does_not_block_a_true_quote():
 def test_a_decimal_comma_and_point_are_the_same_number():
     assert numbers("1,5 bar") == numbers("1.5 bar") == {"1.5"}
     assert numbers("50\u00a0m et 3 m") == {"50", "3"}
+
+
+@pytest.mark.parametrize(
+    ("text", "found"),
+    [
+        ("est de 1 000 litres", {"1000"}),
+        ("est de 1\u00a0500 m", {"1500"}),
+        ("de 10 000 à 180 000 m3", {"10000", "180000", "m3"}),
+        ("1 500,5 kg", {"1500.5"}),
+        ("en 2010 500 victimes", {"2010", "500"}),
+        ("de 1 5000 m", {"1", "5000"}),
+        ("de noter1 que la zone", {"noter1"}),
+        ("le décret de 1998^4", {"1998^4", "1998"}),
+        ("à 3*10^8 m/s", {"3", "10^8", "10"}),
+        ("du CO2 à 5 %", {"CO2", "5"}),
+        ("des masques FFP2 ou FFP3, à50 m", {"FFP2", "FFP3", "à50"}),
+        ("à 50m du feu", {"50"}),
+        ("relève à 06h30, 2x70 mm, 1m3", {"06h30", "2x70", "1m3"}),
+        ("de _500 m_ et 1er", {"500", "1"}),
+    ],
+)
+def test_numbers_are_read_whole_with_their_codes_and_exponents(text, found):
+    assert numbers(text) == found
+
+
+@pytest.mark.parametrize(
+    ("sentence", "quote", "passes"),
+    [
+        ("La pression est de 1 bar.", "est de 1 000 litres par minute", False),
+        ("La distance est de 500 m.", "est de 1 500 m autour du site", False),
+        ("La distance est de 1500 m.", "est de 1 500 m autour du site", True),
+        ("La distance est de 1 500 m.", "est de 1 500 m autour du site", True),
+        ("La zone est balisée à 1 mètre.", "de noter1 que la zone est balisée", False),
+        ("Masques de type FFP1 au minimum.", "masques de type FFP2 ou FFP3", False),
+        ("Masques de type FFP2 au minimum.", "masques de type FFP2 ou FFP3", True),
+        ("Engager une équipe RCH1.", "engager une équipe RCH4", False),
+        ("Un périmètre à100 m.", "établir un périmètre de 50 m", False),
+        ("La lumière va à 3*10^5 m/s.", "une vitesse de 3*10^8 m/s", False),
+        ("Le décret date de 1998.", "le décret de 1998^4 fixe", True),
+        ("Le CO2 est toxique.", "le CO2 est un gaz toxique", True),
+        ("Relève prévue à 06h00.", "relève prévue à 06h30 au plus tard", False),
+        ("Prévoir 2x110 mm.", "établir 2x70 mm de tuyaux", False),
+        ("Prévoir 2,5x110 mm.", "établir 2,5x70 mm de tuyaux", False),
+        ("Établir 2x70 mm.", "établir 2x70 mm de tuyaux", True),
+        ("Périmètre de _500 m_.", "établir un périmètre de 50 m", False),
+        ("Un périmètre de 50m.", "établir un périmètre de 50 m", True),
+    ],
+)
+def test_a_figure_must_be_a_whole_number_of_its_quotes(sentence, quote, passes):
+    passage = _passage(1, f"Il faut {quote}, dit le guide.")
+    result = answer("Q ?", [passage], FakeChat(_draft(_sentence(sentence, ("P1", quote)))))
+    assert (result.status == "answered") is passes, result.problems
 
 
 @pytest.mark.parametrize(
