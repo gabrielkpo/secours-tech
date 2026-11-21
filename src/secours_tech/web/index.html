@@ -14,6 +14,10 @@
       <div class="brand">
         <img src="/static/logo.svg" alt="" width="28" height="28">
         <span>SecoursTech</span>
+        <button type="button" class="icon collapse" id="collapse" aria-label="Replier la barre"
+          aria-controls="sidebar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
+        </button>
       </div>
       <button type="button" class="new" id="new">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -23,20 +27,14 @@
       <ol class="history" id="history"></ol>
       <p class="side-empty" id="history-empty">Vos questions s'afficheront ici. Rien n'est gardé
         dans le navigateur : la liste disparaît au rechargement de la page.</p>
-      <div class="side-foot">
-        <p>Information générale tirée de la doctrine : en intervention, le COS décide. Aucun
-          conseil médical.</p>
-        <p>Guides publiés par le ministère de l'Intérieur, droits de reproduction réservés ; les
-          extraits cités renvoient à la page officielle.</p>
-      </div>
     </aside>
     <div class="scrim" id="scrim" hidden></div>
 
     <div class="main">
       <header class="topbar">
-        <button type="button" class="icon" id="menu" aria-label="Ouvrir la liste des questions"
+        <button type="button" class="icon" id="menu" aria-label="Déplier la barre"
           aria-controls="sidebar" aria-expanded="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg>
         </button>
         <span class="topbar-title">SecoursTech</span>
         <button type="button" class="icon" id="new-top" aria-label="Nouvelle question">
@@ -48,8 +46,10 @@
         <section class="welcome" id="welcome">
           <img src="/static/logo.svg" alt="" width="48" height="48">
           <h1>Que dit la doctrine ?</h1>
-          <p>Questions sur la doctrine officielle des sapeurs-pompiers (GDO, GTO, PSE, SSUAP).
-            Chaque phrase de la réponse cite le guide et la page ; sans source, pas de réponse.</p>
+          <p>Questions sur la doctrine officielle des sapeurs-pompiers (GDO, GTO, PSE, SSUAP),
+            publiée par le ministère de l'Intérieur. Chaque phrase de la réponse cite le guide et
+            la page ; sans source, pas de réponse. Information générale : en intervention, le COS
+            décide ; aucun conseil médical.</p>
           <div class="suggestions" id="suggestions">
             <button type="button">Quel périmètre de sécurité autour d'une fuite de gaz ?</button>
             <button type="button">Quand commencer la ventilation sur un feu de local ?</button>

@@ -25,6 +25,8 @@ const historyEmpty = $("history-empty");
 const sidebar = $("sidebar");
 const scrim = $("scrim");
 const menu = $("menu");
+const app = document.querySelector(".app");
+const phone = window.matchMedia("(max-width: 800px)");
 
 const items = []; // {id, question, data, error}; data null while the answer is pending
 let shown = []; // ids of the exchanges in the thread
@@ -227,6 +229,18 @@ function fresh() {
   field.focus();
 }
 
+// On a computer the bar folds away and unfolds; on a phone it slides over the thread.
+function fold() {
+  app.classList.add("folded");
+  menu.setAttribute("aria-expanded", "false");
+  menu.focus();
+}
+
+function unfold() {
+  app.classList.remove("folded");
+  menu.setAttribute("aria-expanded", "true");
+}
+
 function openSidebar() {
   sidebar.classList.add("open");
   scrim.hidden = false;
@@ -256,9 +270,12 @@ for (const button of $("suggestions").querySelectorAll("button")) {
 }
 $("new").addEventListener("click", fresh);
 $("new-top").addEventListener("click", fresh);
-menu.addEventListener("click", () =>
-  sidebar.classList.contains("open") ? closeSidebar() : openSidebar(),
-);
+menu.addEventListener("click", () => {
+  if (!phone.matches) unfold();
+  else if (sidebar.classList.contains("open")) closeSidebar();
+  else openSidebar();
+});
+$("collapse").addEventListener("click", () => (phone.matches ? closeSidebar() : fold()));
 scrim.addEventListener("click", closeSidebar);
 document.addEventListener("keydown", (event) => event.key === "Escape" && closeSidebar());
 
