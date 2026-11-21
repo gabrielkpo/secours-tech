@@ -4,38 +4,77 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SecoursTech</title>
+  <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <main>
-    <h1>SecoursTech</h1>
-    <p class="lead">Questions sur la doctrine officielle des sapeurs-pompiers (GDO, GTO, PSE,
-      SSUAP). Chaque phrase de la réponse cite le guide et la page ; sans source, pas de réponse.</p>
-
-    <form id="ask">
-      <label for="question">Votre question</label>
-      <textarea id="question" name="question" rows="3" maxlength="500" required
-        placeholder="Ex. : quelle distance de sécurité autour d'une fuite de gaz ?"></textarea>
-      <div class="row">
-        <span id="count">0 / 500</span>
-        <button type="submit" id="send">Demander</button>
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Questions de la session">
+      <div class="brand">
+        <img src="/static/logo.svg" alt="" width="28" height="28">
+        <span>SecoursTech</span>
       </div>
-    </form>
+      <button type="button" class="new" id="new">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        Nouvelle question
+      </button>
+      <h2 class="side-title">Cette session</h2>
+      <ol class="history" id="history"></ol>
+      <p class="side-empty" id="history-empty">Vos questions s'afficheront ici. Rien n'est gardé
+        dans le navigateur : la liste disparaît au rechargement de la page.</p>
+      <div class="side-foot">
+        <p>Information générale tirée de la doctrine : en intervention, le COS décide. Aucun
+          conseil médical.</p>
+        <p>Guides publiés par le ministère de l'Intérieur, droits de reproduction réservés ; les
+          extraits cités renvoient à la page officielle.</p>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
 
-    <p class="warning">N'écrivez aucune donnée personnelle (nom, adresse, état d'une victime) :
-      la question est envoyée à Mistral AI pour rédiger la réponse, sous une offre gratuite qui
-      lui permet de s'en servir pour entraîner ses modèles, et elle est conservée 90 jours dans le
-      journal du service, sans adresse IP ni identifiant.</p>
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="icon" id="menu" aria-label="Ouvrir la liste des questions"
+          aria-controls="sidebar" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <span class="topbar-title">SecoursTech</span>
+        <button type="button" class="icon" id="new-top" aria-label="Nouvelle question">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </header>
 
-    <section id="result" aria-live="polite"></section>
+      <main class="thread" id="thread" aria-live="polite">
+        <section class="welcome" id="welcome">
+          <img src="/static/logo.svg" alt="" width="48" height="48">
+          <h1>Que dit la doctrine ?</h1>
+          <p>Questions sur la doctrine officielle des sapeurs-pompiers (GDO, GTO, PSE, SSUAP).
+            Chaque phrase de la réponse cite le guide et la page ; sans source, pas de réponse.</p>
+          <div class="suggestions" id="suggestions">
+            <button type="button">Quel périmètre de sécurité autour d'une fuite de gaz ?</button>
+            <button type="button">Quand commencer la ventilation sur un feu de local ?</button>
+            <button type="button">Comment installer une victime en position latérale de sécurité ?</button>
+            <button type="button">Qui fait quoi à l'établissement d'une lance ?</button>
+          </div>
+        </section>
+      </main>
 
-    <footer>
-      <p>Information générale tirée de la doctrine : en intervention, le COS décide. Ce service
-        ne donne aucun conseil médical.</p>
-      <p>Les guides sont publiés par le ministère de l'Intérieur, droits de reproduction
-        réservés ; les extraits cités renvoient à la page officielle.</p>
-    </footer>
-  </main>
+      <div class="composer-wrap">
+        <form class="composer" id="ask">
+          <label for="question" class="visually-hidden">Votre question</label>
+          <textarea id="question" name="question" rows="1" maxlength="500" required
+            placeholder="Posez une question sur la doctrine…"></textarea>
+          <span id="count" class="count" aria-live="polite"></span>
+          <button type="submit" id="send" class="send" aria-label="Envoyer la question">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          </button>
+        </form>
+        <p class="warning">Chaque question est traitée seule. N'écrivez aucune donnée personnelle
+          (nom, adresse, état d'une victime) : la question part chez Mistral AI, dont l'offre
+          gratuite peut s'en servir pour entraîner ses modèles, et reste 90 jours dans le journal
+          du service, sans adresse IP ni identifiant.</p>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

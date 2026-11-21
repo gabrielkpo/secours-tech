@@ -245,7 +245,10 @@ def test_the_page_its_script_and_health_are_served(indexed):
     assert "aucune donnée personnelle" in page.text and "entraîner" in page.text
     assert "default-src 'none'" in page.headers["Content-Security-Policy"]
     script = client.get("/static/app.js")
-    assert script.status_code == 200 and "innerHTML" not in script.text
+    assert script.status_code == 200
+    for unsafe in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval("):
+        assert unsafe not in script.text  # model output is shown as text only
+    assert client.get("/static/logo.svg").headers["content-type"].startswith("image/svg+xml")
     assert client.get("/health").json()["status"] == "ok"
     assert client.get("/docs").status_code == 404
 
