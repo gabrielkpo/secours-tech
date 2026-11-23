@@ -7,7 +7,7 @@ license = "MIT"
 authors = [{ name = "Gabriel Kpodoh" }]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.162.0",
+    "fastapi==0.162.2",
     "pikepdf==10.18.0",
     "psycopg[binary]>=3.2",
     "uvicorn==0.54.0",
@@ -20,7 +20,7 @@ Issues = "https://github.com/gabrielkpo/secours-tech/issues"
 [project.optional-dependencies]
 # local reference embedding and reranking; not installed in the main CI job, exercised by the
 # Local extra workflow (tests/test_local_extra.py)
-local = ["torch==2.14.1", "transformers==5.21.0"]
+local = ["torch==2.15.0", "transformers==5.22.2"]
 
 [dependency-groups]
 dev = [
